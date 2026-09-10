@@ -20,6 +20,10 @@ const PORT = process.env.PORT || 3000;
 
 const server = http.createServer((req, res) => {
 
+  // ------------------------------------------
+  // 🌐 Main Page
+  // ------------------------------------------
+
   if (req.url === "/" || req.url === "") {
 
     res.writeHead(200, {
@@ -32,6 +36,11 @@ const server = http.createServer((req, res) => {
 
     return;
   }
+
+
+  // ------------------------------------------
+  // ❤️ Health Check
+  // ------------------------------------------
 
   if (req.url === "/health") {
 
@@ -49,6 +58,11 @@ const server = http.createServer((req, res) => {
 
     return;
   }
+
+
+  // ------------------------------------------
+  // 404
+  // ------------------------------------------
 
   res.writeHead(404, {
     "Content-Type": "text/plain; charset=utf-8"
@@ -301,6 +315,10 @@ async function startBot() {
 
   try {
 
+    // ==================================================
+    // 🔐 AUTH
+    // ==================================================
+
     const {
       state,
       saveCreds
@@ -324,6 +342,7 @@ async function startBot() {
       );
 
     }
+
 
     if (!GROUP_ID) {
 
@@ -405,6 +424,7 @@ async function startBot() {
       }
     );
 
+
     sock.ev.on(
       "contacts.update",
       (contacts) => {
@@ -440,6 +460,7 @@ async function startBot() {
               ""
             );
 
+
           if (!number) {
 
             throw new Error(
@@ -448,22 +469,26 @@ async function startBot() {
 
           }
 
+
           console.log("");
           console.log(
             "📱 WhatsApp Pairing Code তৈরি হচ্ছে..."
           );
           console.log("");
 
+
           const code =
             await sock.requestPairingCode(
               number
             );
+
 
           const formattedCode =
             code
               ?.match(/.{1,4}/g)
               ?.join("-") ||
             code;
+
 
           console.log("");
           console.log(
@@ -538,6 +563,10 @@ async function startBot() {
         } = update;
 
 
+        // ==================================================
+        // 🟢 CONNECTING
+        // ==================================================
+
         if (
           connection === "connecting"
         ) {
@@ -548,6 +577,10 @@ async function startBot() {
 
         }
 
+
+        // ==================================================
+        // ✅ CONNECTED
+        // ==================================================
 
         if (
           connection === "open"
@@ -566,6 +599,7 @@ async function startBot() {
             "=========================================="
           );
 
+
           if (GROUP_ID) {
 
             console.log(
@@ -573,6 +607,7 @@ async function startBot() {
             );
 
           }
+
 
           console.log(
             "🟢 Bot Status: ONLINE"
@@ -583,16 +618,22 @@ async function startBot() {
         }
 
 
+        // ==================================================
+        // ❌ CONNECTION CLOSED
+        // ==================================================
+
         if (
           connection === "close"
         ) {
 
           botStarting = false;
 
+
           const statusCode =
             new Boom(
               lastDisconnect?.error
             )?.output?.statusCode;
+
 
           console.log("");
           console.log(
@@ -608,6 +649,10 @@ async function startBot() {
             "=========================================="
           );
 
+
+          // ==================================================
+          // 🚪 LOGGED OUT
+          // ==================================================
 
           if (
             statusCode ===
@@ -627,6 +672,10 @@ async function startBot() {
           }
 
 
+          // ==================================================
+          // 🔄 RECONNECT
+          // ==================================================
+
           console.log(
             "🔄 Connection বন্ধ হয়েছে।"
           );
@@ -634,6 +683,7 @@ async function startBot() {
           console.log(
             "🔄 Automatic Reconnect চালু হচ্ছে..."
           );
+
 
           scheduleReconnect(5000);
 
@@ -661,8 +711,10 @@ async function startBot() {
 
           }
 
+
           const groupId =
             update.id;
+
 
           if (
             GROUP_ID &&
@@ -673,13 +725,16 @@ async function startBot() {
 
           }
 
+
           const metadata =
             await sock.groupMetadata(
               groupId
             );
 
+
           const groupName =
             metadata.subject;
+
 
           for (
             const participant
@@ -693,6 +748,7 @@ async function startBot() {
                   id: participant
                 });
 
+
               const mentionText =
                 memberName ===
                 "Unknown Member"
@@ -700,6 +756,7 @@ async function startBot() {
                   ? "@New Member"
 
                   : `@${memberName}`;
+
 
               const message =
                 WELCOME
@@ -712,6 +769,7 @@ async function startBot() {
                     groupName
                   );
 
+
               await sock.sendMessage(
                 groupId,
                 {
@@ -723,9 +781,11 @@ async function startBot() {
                 }
               );
 
+
               console.log(
                 `🎉 Welcome message sent to ${participant}`
               );
+
 
             } catch (error) {
 
@@ -738,6 +798,7 @@ async function startBot() {
             }
 
           }
+
 
         } catch (error) {
 
@@ -778,6 +839,11 @@ async function startBot() {
 
               }
 
+
+              // ----------------------------------------
+              // নিজের Message Ignore
+              // ----------------------------------------
+
               if (
                 msg.key?.fromMe
               ) {
@@ -786,8 +852,10 @@ async function startBot() {
 
               }
 
+
               const remoteJid =
                 msg.key?.remoteJid;
+
 
               if (
                 !remoteJid ||
@@ -800,6 +868,7 @@ async function startBot() {
 
               }
 
+
               if (
                 GROUP_ID &&
                 remoteJid !== GROUP_ID
@@ -809,10 +878,12 @@ async function startBot() {
 
               }
 
+
               const messageText =
                 getMessageText(
                   msg.message
                 );
+
 
               if (!messageText) {
 
@@ -820,10 +891,12 @@ async function startBot() {
 
               }
 
+
               const command =
                 messageText
                   .split(/\s+/)[0]
                   .toLowerCase();
+
 
               console.log(
                 `📩 Command: ${command} | Group: ${remoteJid}`
@@ -955,6 +1028,7 @@ async function startBot() {
                     remoteJid
                   );
 
+
                 await sock.sendMessage(
                   remoteJid,
                   {
@@ -984,6 +1058,7 @@ async function startBot() {
                     remoteJid
                   );
 
+
                 await sock.sendMessage(
                   remoteJid,
                   {
@@ -1008,12 +1083,14 @@ async function startBot() {
                     remoteJid
                   );
 
+
                 const adminParticipants =
                   metadata.participants.filter(
                     (p) =>
                       p.admin === "admin" ||
                       p.admin === "superadmin"
                   );
+
 
                 if (
                   adminParticipants.length === 0
@@ -1031,6 +1108,7 @@ async function startBot() {
 
                 }
 
+
                 const admins =
                   adminParticipants.map(
                     (p, index) => {
@@ -1043,12 +1121,14 @@ async function startBot() {
                     }
                   );
 
+
                 const mentions =
                   adminParticipants
                     .map(
                       (p) => p.id
                     )
                     .filter(Boolean);
+
 
                 await sock.sendMessage(
                   remoteJid,
@@ -1076,9 +1156,11 @@ async function startBot() {
                     remoteJid
                   );
 
+
                 const participants =
                   metadata.participants ||
                   [];
+
 
                 if (
                   participants.length === 0
@@ -1095,6 +1177,7 @@ async function startBot() {
                   continue;
 
                 }
+
 
                 const userList =
                   participants.map(
@@ -1117,6 +1200,7 @@ async function startBot() {
                     }
                   );
 
+
                 const header = `
 👥 *GROUP MEMBERS LIST*
 
@@ -1124,15 +1208,19 @@ async function startBot() {
 
 `;
 
+
                 const footer = `
 
 ❤️ *Piyas*`;
 
+
                 let currentMessage =
                   header;
 
+
                 let currentMentions =
                   [];
+
 
                 for (
                   const user
@@ -1141,6 +1229,7 @@ async function startBot() {
 
                   const line =
                     `${user.number}️⃣ ${user.name}\n`;
+
 
                   if (
                     currentMessage.length +
@@ -1160,6 +1249,7 @@ async function startBot() {
                       }
                     );
 
+
                     currentMessage =
                       header;
 
@@ -1168,8 +1258,10 @@ async function startBot() {
 
                   }
 
+
                   currentMessage +=
                     line;
+
 
                   if (user.id) {
 
@@ -1181,8 +1273,10 @@ async function startBot() {
 
                 }
 
+
                 currentMessage +=
                   footer;
+
 
                 if (
                   currentMessage.trim()
@@ -1203,6 +1297,7 @@ async function startBot() {
 
               }
 
+
             } catch (messageError) {
 
               console.log("");
@@ -1220,6 +1315,7 @@ async function startBot() {
             }
 
           }
+
 
         } catch (error) {
 
@@ -1244,6 +1340,7 @@ async function startBot() {
   } catch (error) {
 
     botStarting = false;
+
 
     console.log("");
     console.log(
