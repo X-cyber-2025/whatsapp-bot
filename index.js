@@ -160,6 +160,10 @@ const WELCOME = `
 const contactNames = new Map();
 
 
+// ==================================================
+// 👤 SAVE CONTACTS
+// ==================================================
+
 function saveContacts(contacts) {
 
   for (const contact of contacts || []) {
@@ -168,25 +172,38 @@ function saveContacts(contacts) {
       continue;
     }
 
+
     const name =
       contact.notify ||
       contact.name ||
       contact.verifiedName ||
+      contact.pushName ||
       "";
 
-    if (name) {
+
+    if (
+      name &&
+      name.trim()
+    ) {
 
       const cleanName =
         name.trim();
 
-      // Main contact ID
+
+      // ------------------------------------------
+      // Main ID
+      // ------------------------------------------
+
       contactNames.set(
         contact.id,
         cleanName
       );
 
 
-      // LID mapping
+      // ------------------------------------------
+      // LID Mapping
+      // ------------------------------------------
+
       if (contact.lid) {
 
         contactNames.set(
@@ -196,9 +213,56 @@ function saveContacts(contacts) {
 
       }
 
+
+      // ------------------------------------------
+      // Phone JID Mapping
+      // ------------------------------------------
+
+      if (contact.phoneNumber) {
+
+        contactNames.set(
+          contact.phoneNumber,
+          cleanName
+        );
+
+      }
+
     }
 
   }
+
+}
+
+
+// ==================================================
+// 👤 CACHE PUSH NAME
+// ==================================================
+
+function savePushName(id, pushName) {
+
+  if (
+    !id ||
+    !pushName
+  ) {
+
+    return;
+
+  }
+
+
+  const cleanName =
+    pushName.trim();
+
+
+  if (!cleanName) {
+    return;
+  }
+
+
+  contactNames.set(
+    id,
+    cleanName
+  );
 
 }
 
@@ -213,44 +277,102 @@ function getDisplayName(participant) {
     return "Unknown Member";
   }
 
+
   const id =
     participant.id;
 
 
-  const name =
-    contactNames.get(id) ||
-    participant.notify ||
-    participant.name ||
-    participant.verifiedName ||
-    "";
+  // ------------------------------------------
+  // 1️⃣ Cached Name
+  // ------------------------------------------
+
+  const cachedName =
+    contactNames.get(id);
 
 
   if (
-    name &&
-    name.trim()
+    cachedName &&
+    cachedName.trim()
   ) {
 
-    return name.trim();
+    return cachedName.trim();
 
   }
 
 
   // ------------------------------------------
-  // 📱 Phone JID Fallback
+  // 2️⃣ Participant Name
   // ------------------------------------------
 
-  const number =
-    id
-      .split("@")[0]
-      .split(":")[0];
+  const participantName =
+    participant.notify ||
+    participant.name ||
+    participant.verifiedName ||
+    participant.pushName ||
+    "";
 
 
   if (
-    number &&
-    /^\d+$/.test(number)
+    participantName &&
+    participantName.trim()
   ) {
 
-    return `+${number}`;
+    const cleanName =
+      participantName.trim();
+
+
+    // Save for future use
+    contactNames.set(
+      id,
+      cleanName
+    );
+
+
+    return cleanName;
+
+  }
+
+
+  // ------------------------------------------
+  // 3️⃣ Phone JID
+  // ------------------------------------------
+
+  if (
+    id.endsWith("@s.whatsapp.net")
+  ) {
+
+    const number =
+      id
+        .split("@")[0]
+        .split(":")[0];
+
+
+    if (
+      number &&
+      /^\d+$/.test(number)
+    ) {
+
+      return `+${number}`;
+
+    }
+
+  }
+
+
+  // ------------------------------------------
+  // 4️⃣ LID
+  // ------------------------------------------
+
+  // LID-এর numeric অংশকে phone number
+  // হিসেবে দেখানো হবে না।
+  //
+  // কারণ LID আসল phone number নয়।
+
+  if (
+    id.endsWith("@lid")
+  ) {
+
+    return "Unknown Member";
 
   }
 
@@ -904,12 +1026,17 @@ async function startBot() {
 
 
               // ----------------------------------------
-              // 👤 Sender Name Cache
+              // 👤 Sender ID
               // ----------------------------------------
 
               const senderId =
                 msg.key?.participant ||
                 msg.key?.remoteJid;
+
+
+              // ----------------------------------------
+              // 👤 Sender Push Name
+              // ----------------------------------------
 
               const senderName =
                 msg.pushName;
@@ -920,9 +1047,9 @@ async function startBot() {
                 senderName
               ) {
 
-                contactNames.set(
+                savePushName(
                   senderId,
-                  senderName.trim()
+                  senderName
                 );
 
               }
@@ -1183,6 +1310,10 @@ async function startBot() {
                 }
 
 
+                // ------------------------------------------
+                // 👑 ADMIN LIST
+                // ------------------------------------------
+
                 const admins =
                   adminParticipants.map(
                     (p, index) => {
@@ -1190,11 +1321,18 @@ async function startBot() {
                       const name =
                         getDisplayName(p);
 
-                      return `${index + 1}️⃣ @${name}`;
+
+                      return (
+                        `${index + 1}️⃣ @${name}`
+                      );
 
                     }
                   );
 
+
+                // ------------------------------------------
+                // 📌 ACTUAL WHATSAPP MENTIONS
+                // ------------------------------------------
 
                 const mentions =
                   adminParticipants
