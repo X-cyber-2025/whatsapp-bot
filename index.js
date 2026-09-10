@@ -176,10 +176,25 @@ function saveContacts(contacts) {
 
     if (name) {
 
+      const cleanName =
+        name.trim();
+
+      // Main contact ID
       contactNames.set(
         contact.id,
-        name
+        cleanName
       );
+
+
+      // LID mapping
+      if (contact.lid) {
+
+        contactNames.set(
+          contact.lid,
+          cleanName
+        );
+
+      }
 
     }
 
@@ -198,18 +213,49 @@ function getDisplayName(participant) {
     return "Unknown Member";
   }
 
+  const id =
+    participant.id;
+
+
   const name =
-    contactNames.get(participant.id) ||
+    contactNames.get(id) ||
     participant.notify ||
     participant.name ||
     participant.verifiedName ||
     "";
 
-  if (!name) {
-    return "Unknown Member";
+
+  if (
+    name &&
+    name.trim()
+  ) {
+
+    return name.trim();
+
   }
 
-  return name.trim();
+
+  // ------------------------------------------
+  // 📱 Phone JID Fallback
+  // ------------------------------------------
+
+  const number =
+    id
+      .split("@")[0]
+      .split(":")[0];
+
+
+  if (
+    number &&
+    /^\d+$/.test(number)
+  ) {
+
+    return `+${number}`;
+
+  }
+
+
+  return "Unknown Member";
 
 }
 
@@ -857,6 +903,35 @@ async function startBot() {
                 msg.key?.remoteJid;
 
 
+              // ----------------------------------------
+              // 👤 Sender Name Cache
+              // ----------------------------------------
+
+              const senderId =
+                msg.key?.participant ||
+                msg.key?.remoteJid;
+
+              const senderName =
+                msg.pushName;
+
+
+              if (
+                senderId &&
+                senderName
+              ) {
+
+                contactNames.set(
+                  senderId,
+                  senderName.trim()
+                );
+
+              }
+
+
+              // ----------------------------------------
+              // 👥 Group Message Check
+              // ----------------------------------------
+
               if (
                 !remoteJid ||
                 !remoteJid.endsWith(
@@ -925,7 +1000,6 @@ async function startBot() {
 6️⃣ /groupinfo — Group Information
 7️⃣ /members — Member Count
 8️⃣ /admins — Admin List
-9️⃣ /users — সকল সদস্যের তালিকা
 
 ❤️ *Piyas*
 `
