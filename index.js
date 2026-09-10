@@ -1,5 +1,3 @@
-// এই পেজে থাকা পুরো পুরোনো কোড মুছে নিচের কোড বসাও।
-
 import http from "http";
 
 import makeWASocket, {
