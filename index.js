@@ -52,7 +52,7 @@ const RULES = `
 7️⃣ যেকোনো লেনদেন Admin-এর মাধ্যমে করার চেষ্টা করুন।
 8️⃣ নিয়ম ভঙ্গ করলে Admin প্রয়োজনীয় ব্যবস্থা নিতে পারবেন।
 
-❤️ সবাই নিয়ম মেনে গ্রুপে থাকুন।
+❤️ সবাই নিয়ম মেনে চলুন।
 `;
 
 
@@ -71,11 +71,7 @@ const WELCOME = `
 💰 Account Buy/Sell ও Google Play Points সংক্রান্ত আপডেট পেতে গ্রুপে থাকুন।
 
 ⚠️ গুরুত্বপূর্ণ সতর্কতা:
-
-যেকোনো ডিল অবশ্যই গ্রুপের নির্ধারিত Admin-এর মাধ্যমে সম্পন্ন করবেন।
-
-অন্য কারও সাথে সরাসরি লেনদেন করে প্রতারিত হলে তার দায়ভার Admin
-বা গ্রুপ কর্তৃপক্ষ কোনোভাবেই বহন করবে না।
+যেকোনো ডিল অবশ্যই গ্রুপের নির্ধারিত Admin-এর মাধ্যমে সম্পন্ন করবেন। অন্য কারও সাথে সরাসরি লেনদেন করে প্রতারিত হলে তার দায়ভার Admin বা গ্রুপ কর্তৃপক্ষ কোনোভাবেই বহন করবে না।
 
 🌐 প্রয়োজন হলে আমাদের ওয়েবসাইট ভিজিট করুন।
 🔗 ওয়েবসাইটে যেতে গ্রুপের পিন করা মেসেজ চেক করুন।
@@ -94,7 +90,6 @@ async function startBot() {
   console.log("🚀 WhatsApp Bot Starting...");
   console.log("");
 
-
   try {
 
     // ======================================
@@ -112,7 +107,6 @@ async function startBot() {
     // ======================================
 
     let pairingCodeRequested = false;
-
     let reconnecting = false;
 
 
@@ -130,13 +124,10 @@ async function startBot() {
 
       printQRInTerminal: false,
 
-      // Pairing Code-এর জন্য browser profile
       browser: Browsers.ubuntu("Chrome"),
 
-      // Connection timeout
       connectTimeoutMs: 60000,
 
-      // Keep connection alive
       keepAliveIntervalMs: 25000
 
     });
@@ -179,7 +170,6 @@ async function startBot() {
         ) {
 
           pairingCodeRequested = true;
-
 
           try {
 
@@ -353,24 +343,27 @@ async function startBot() {
 
 
     // ==========================================
-    // 👥 NEW GROUP MEMBER
+    // 👥 NEW GROUP MEMBER WELCOME
     // ==========================================
 
     sock.ev.on(
       "group-participants.update",
       async (update) => {
 
+        if (update.action !== "add") {
+          return;
+        }
+
+
         try {
-
-          if (
-            update.action !== "add"
-          ) {
-            return;
-          }
-
 
           const groupId =
             update.id;
+
+
+          console.log(
+            `👥 নতুন সদস্য যোগ হয়েছে: ${groupId}`
+          );
 
 
           const metadata =
@@ -380,7 +373,8 @@ async function startBot() {
 
 
           const groupName =
-            metadata.subject;
+            metadata.subject ||
+            "আমাদের গ্রুপ";
 
 
           for (
@@ -418,11 +412,16 @@ async function startBot() {
               );
 
 
+              console.log(
+                `✅ Welcome sent to: ${participant}`
+              );
+
+
             } catch (error) {
 
               console.log(
                 "❌ Welcome Message Error:",
-                error
+                error?.message || error
               );
 
             }
@@ -434,7 +433,7 @@ async function startBot() {
 
           console.log(
             "❌ Group Welcome Error:",
-            error
+            error?.message || error
           );
 
         }
@@ -687,7 +686,7 @@ async function startBot() {
 
           console.log(
             "❌ Command Error:",
-            error
+            error?.message || error
           );
 
         }
