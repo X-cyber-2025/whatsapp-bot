@@ -208,7 +208,7 @@ function saveContacts(contacts) {
       }
 
 
-      // Phone number
+      // Phone Number
       if (contact.phoneNumber) {
 
         contactNames.set(
@@ -274,7 +274,9 @@ function savePushName(
 function getDisplayName(participant) {
 
   if (!participant?.id) {
+
     return "Unknown Member";
+
   }
 
 
@@ -329,7 +331,7 @@ function getDisplayName(participant) {
 
 
   // ------------------------------------------
-  // 3️⃣ Display Name
+  // 3️⃣ Notify / Name / Verified Name
   // ------------------------------------------
 
   const name =
@@ -422,8 +424,8 @@ function getDisplayName(participant) {
   // 6️⃣ LID
   // ------------------------------------------
 
-  // LID-এর সংখ্যা phone number নয়।
-  // তাই LID-কে fake phone number হিসেবে দেখানো হবে না।
+  // LID phone number নয়।
+  // তাই LID-কে fake number হিসেবে দেখানো হবে না।
 
   if (
     id.endsWith("@lid")
@@ -440,7 +442,7 @@ function getDisplayName(participant) {
 
 
 // ==================================================
-// 🧹 TEXT CLEANER
+// 🧹 GET MESSAGE TEXT
 // ==================================================
 
 function getMessageText(message) {
@@ -700,8 +702,12 @@ async function startBot() {
       setTimeout(
         async () => {
 
-          if (pairingCodeRequested) {
+          if (
+            pairingCodeRequested
+          ) {
+
             return;
+
           }
 
 
@@ -790,7 +796,6 @@ async function startBot() {
 
 
             console.log("");
-
             console.log(
               "❌ Pairing Code তৈরি করা যায়নি।"
             );
@@ -826,9 +831,9 @@ async function startBot() {
         } = update;
 
 
-        // ==================================================
+        // ------------------------------------------
         // 🟢 CONNECTING
-        // ==================================================
+        // ------------------------------------------
 
         if (
           connection === "connecting"
@@ -841,9 +846,9 @@ async function startBot() {
         }
 
 
-        // ==================================================
+        // ------------------------------------------
         // ✅ CONNECTED
-        // ==================================================
+        // ------------------------------------------
 
         if (
           connection === "open"
@@ -883,9 +888,9 @@ async function startBot() {
         }
 
 
-        // ==================================================
+        // ------------------------------------------
         // ❌ CONNECTION CLOSED
-        // ==================================================
+        // ------------------------------------------
 
         if (
           connection === "close"
@@ -916,9 +921,9 @@ async function startBot() {
           );
 
 
-          // ------------------------------------------
+          // ----------------------------------------
           // 🚪 LOGGED OUT
-          // ------------------------------------------
+          // ----------------------------------------
 
           if (
             statusCode ===
@@ -938,9 +943,9 @@ async function startBot() {
           }
 
 
-          // ------------------------------------------
+          // ----------------------------------------
           // 🔄 RECONNECT
-          // ------------------------------------------
+          // ----------------------------------------
 
           console.log(
             "🔄 Connection বন্ধ হয়েছে।"
@@ -1156,7 +1161,7 @@ async function startBot() {
 
 
               // ----------------------------------------
-              // 👥 Group Message Check
+              // 👥 Group Check
               // ----------------------------------------
 
               if (
@@ -1386,7 +1391,7 @@ async function startBot() {
                 try {
 
                   // ------------------------------------------
-                  // 🔄 Get FRESH group metadata
+                  // 🔄 Get fresh group metadata
                   // ------------------------------------------
 
                   const metadata =
@@ -1399,26 +1404,11 @@ async function startBot() {
                     metadata?.participants || [];
 
 
-                  console.log("");
-                  console.log(
-                    "=========================================="
-                  );
-                  console.log(
-                    "🔍 Searching Group Admins..."
-                  );
-                  console.log(
-                    `👥 Total Participants: ${participants.length}`
-                  );
-                  console.log(
-                    "=========================================="
-                  );
-
-
                   // ------------------------------------------
-                  // 👑 Find ONLY Admins
+                  // 👑 Find REAL GROUP ADMINS
                   // ------------------------------------------
 
-                  const admins =
+                  const adminParticipants =
                     participants.filter(
                       (participant) =>
                         participant.admin === "admin" ||
@@ -1426,14 +1416,13 @@ async function startBot() {
                     );
 
 
+                  // ------------------------------------------
+                  // ❌ No Admin
+                  // ------------------------------------------
+
                   if (
-                    admins.length === 0
+                    adminParticipants.length === 0
                   ) {
-
-                    console.log(
-                      "❌ No Admin found."
-                    );
-
 
                     await sock.sendMessage(
                       remoteJid,
@@ -1450,11 +1439,11 @@ async function startBot() {
 
 
                   // ------------------------------------------
-                  // 🆔 Extract REAL participant IDs
+                  // 🆔 Get EVERY ADMIN'S REAL ID
                   // ------------------------------------------
 
                   const adminData =
-                    admins
+                    adminParticipants
                       .map(
                         (participant) => {
 
@@ -1468,7 +1457,7 @@ async function startBot() {
 
 
                           // --------------------------------
-                          // Name priority
+                          // 👤 Find display name
                           // --------------------------------
 
                           const name =
@@ -1482,14 +1471,11 @@ async function startBot() {
 
                           return {
 
-                            id,
+                            id: id,
 
                             name:
                               name.trim() ||
-                              "Admin",
-
-                            role:
-                              participant.admin
+                              "Admin"
 
                           };
 
@@ -1499,7 +1485,7 @@ async function startBot() {
 
 
                   // ------------------------------------------
-                  // ❌ No valid IDs
+                  // ❌ ID পাওয়া যায়নি
                   // ------------------------------------------
 
                   if (
@@ -1510,7 +1496,7 @@ async function startBot() {
                       remoteJid,
                       {
                         text:
-                          "❌ Admin পাওয়া গেছে, কিন্তু valid participant ID পাওয়া যায়নি।"
+                          "❌ Admin পাওয়া গেছে, কিন্তু তাদের ID পাওয়া যায়নি।"
                       }
                     );
 
@@ -1521,7 +1507,7 @@ async function startBot() {
 
 
                   // ------------------------------------------
-                  // 🎯 ACTUAL IDs FOR MENTIONS
+                  // 🎯 ALL REAL ADMIN IDs
                   // ------------------------------------------
 
                   const mentions =
@@ -1532,32 +1518,18 @@ async function startBot() {
 
 
                   // ------------------------------------------
-                  // 📝 Create visible Admin list
+                  // 📝 EXACT DISPLAY FORMAT
                   // ------------------------------------------
 
                   const adminLines =
                     adminData.map(
-                      (admin, index) => {
-
-                        const role =
-                          admin.role ===
-                          "superadmin"
-
-                            ? "👑 Super Admin"
-
-                            : "🛡️ Admin";
-
-
-                        return (
-                          `${index + 1}️⃣ @${admin.name} — ${role}`
-                        );
-
-                      }
+                      (admin) =>
+                        `@${admin.name}`
                     );
 
 
                   // ------------------------------------------
-                  // 📤 SEND ACTUAL MENTIONS
+                  // 📤 SEND ALL ADMIN MENTIONS
                   // ------------------------------------------
 
                   await sock.sendMessage(
@@ -1566,59 +1538,57 @@ async function startBot() {
                       text:
                         `👑 *GROUP ADMINS*\n\n${adminLines.join("\n")}\n\n❤️ *Piyas*`,
 
-                      mentions
+                      mentions:
+                        mentions
                     }
                   );
 
 
                   // ------------------------------------------
-                  // 🖥️ SHOW EXACT IDS IN RENDER LOG
+                  // 🖥️ RENDER LOG
                   // ------------------------------------------
 
-                  console.log(
-                    "=========================================="
-                  );
-                  console.log(
-                    "👑 GROUP ADMIN IDs"
-                  );
+                  console.log("");
                   console.log(
                     "=========================================="
                   );
 
-
-                  for (
-                    const admin
-                    of adminData
-                  ) {
-
-                    console.log(
-                      `👤 Name: ${admin.name}`
-                    );
-
-                    console.log(
-                      `🆔 ID: ${admin.id}`
-                    );
-
-                    console.log(
-                      `🔐 Role: ${admin.role}`
-                    );
-
-                    console.log(
-                      "------------------------------------------"
-                    );
-
-                  }
-
+                  console.log(
+                    "👑 REAL GROUP ADMIN IDs"
+                  );
 
                   console.log(
                     "=========================================="
                   );
-                  console.log(
-                    "✅ Admin mention message sent."
+
+
+                  adminData.forEach(
+                    (admin, index) => {
+
+                      console.log(
+                        `${index + 1}. ${admin.name}`
+                      );
+
+                      console.log(
+                        `🆔 ${admin.id}`
+                      );
+
+                      console.log(
+                        "------------------------------------------"
+                      );
+
+                    }
                   );
+
+
+                  console.log(
+                    `✅ Total Admins: ${adminData.length}`
+                  );
+
                   console.log(
                     "=========================================="
                   );
+
                   console.log("");
 
 
@@ -1665,8 +1635,7 @@ async function startBot() {
 
 
                 const participants =
-                  metadata.participants ||
-                  [];
+                  metadata?.participants || [];
 
 
                 if (
