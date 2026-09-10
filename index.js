@@ -1,3 +1,7 @@
+// এই পেজে থাকা পুরো পুরোনো কোড মুছে নিচের কোড বসাও।
+
+import http from "http";
+
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState
@@ -6,6 +10,15 @@ import makeWASocket, {
 import { Boom } from "@hapi/boom";
 import qrcode from "qrcode-terminal";
 import P from "pino";
+
+const PORT = process.env.PORT || 3000;
+
+http.createServer((req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("WhatsApp Bot is running!");
+}).listen(PORT, () => {
+  console.log(`🌐 Server running on port ${PORT}`);
+});
 
 const PREFIX = "/";
 const AUTH_FOLDER = "./auth_info";
@@ -83,21 +96,16 @@ async function startBot() {
     }
   });
 
-  // নতুন সদস্য যোগ হলে Welcome Message
   sock.ev.on("group-participants.update", async (update) => {
     try {
       if (update.action !== "add") return;
 
       const groupId = update.id;
-
-      const metadata =
-        await sock.groupMetadata(groupId);
-
+      const metadata = await sock.groupMetadata(groupId);
       const groupName = metadata.subject;
 
       for (const participant of update.participants) {
-        const memberName =
-          participant.split("@")[0];
+        const memberName = participant.split("@")[0];
 
         const message = WELCOME
           .replace("{member}", `@${memberName}`)
@@ -113,7 +121,6 @@ async function startBot() {
     }
   });
 
-  // Commands
   sock.ev.on("messages.upsert", async ({ messages }) => {
     try {
       const msg = messages[0];
@@ -123,7 +130,6 @@ async function startBot() {
 
       const remoteJid = msg.key.remoteJid;
 
-      // শুধু Group-এ কাজ করবে
       if (!remoteJid?.endsWith("@g.us")) return;
 
       const messageText =
@@ -136,7 +142,6 @@ async function startBot() {
         .split(/\s+/)[0]
         .toLowerCase();
 
-      // /menu
       if (command === "/menu") {
         await sock.sendMessage(remoteJid, {
           text: `
@@ -154,28 +159,24 @@ async function startBot() {
         });
       }
 
-      // /rules
       else if (command === "/rules") {
         await sock.sendMessage(remoteJid, {
           text: RULES
         });
       }
 
-      // /ping
       else if (command === "/ping") {
         await sock.sendMessage(remoteJid, {
           text: "🏓 Pong!\n✅ Bot is online."
         });
       }
 
-      // /id
       else if (command === "/id") {
         await sock.sendMessage(remoteJid, {
           text: `🆔 Group ID:\n${remoteJid}`
         });
       }
 
-      // /groupinfo
       else if (command === "/groupinfo") {
         const metadata =
           await sock.groupMetadata(remoteJid);
@@ -191,7 +192,6 @@ async function startBot() {
         });
       }
 
-      // /members
       else if (command === "/members") {
         const metadata =
           await sock.groupMetadata(remoteJid);
@@ -202,32 +202,24 @@ async function startBot() {
         });
       }
 
-      // /admins
       else if (command === "/admins") {
         const metadata =
           await sock.groupMetadata(remoteJid);
 
-        const admins = metadata.participants
-          .filter(
-            (p) =>
-              p.admin === "admin" ||
-              p.admin === "superadmin"
-          )
-          .map(
-            (p) =>
-              `@${p.id.split("@")[0]}`
-          );
+        const adminParticipants = metadata.participants.filter(
+          (p) =>
+            p.admin === "admin" ||
+            p.admin === "superadmin"
+        );
+
+        const admins = adminParticipants.map(
+          (p) => `@${p.id.split("@")[0]}`
+        );
 
         await sock.sendMessage(remoteJid, {
           text:
             `👑 *GROUP ADMINS*\n\n${admins.join("\n")}`,
-          mentions: metadata.participants
-            .filter(
-              (p) =>
-                p.admin === "admin" ||
-                p.admin === "superadmin"
-            )
-            .map((p) => p.id)
+          mentions: adminParticipants.map((p) => p.id)
         });
       }
     } catch (error) {
