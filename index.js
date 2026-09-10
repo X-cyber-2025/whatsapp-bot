@@ -37,6 +37,14 @@ const PHONE_NUMBER = process.env.PHONE_NUMBER;
 
 
 // ==========================================
+// 🌐 OFFICIAL WEBSITE
+// ==========================================
+
+const WEBSITE_URL =
+  "https://x-cyber-2025.github.io/X-cyber.web/";
+
+
+// ==========================================
 // 📜 GROUP RULES
 // ==========================================
 
@@ -78,7 +86,7 @@ const WELCOME = `
 বা গ্রুপ কর্তৃপক্ষ কোনোভাবেই বহন করবে না।
 
 🌐 প্রয়োজন হলে আমাদের ওয়েবসাইট ভিজিট করুন।
-🔗 ওয়েবসাইটে যেতে গ্রুপের পিন করা মেসেজ চেক করুন।
+🔗 ওয়েবসাইটে যেতে /website লিখুন।
 
 ❤️ পাশে থাকার জন্য ধন্যবাদ।
 `;
@@ -130,13 +138,10 @@ async function startBot() {
 
       printQRInTerminal: false,
 
-      // Pairing Code-এর জন্য browser profile
       browser: Browsers.ubuntu("Chrome"),
 
-      // Connection timeout
       connectTimeoutMs: 60000,
 
-      // Keep connection alive
       keepAliveIntervalMs: 25000
 
     });
@@ -472,7 +477,10 @@ async function startBot() {
             msg.key.remoteJid;
 
 
-          // শুধু Group
+          // ==================================
+          // শুধু Group Message
+          // ==================================
+
           if (
             !remoteJid ||
             !remoteJid.endsWith("@g.us")
@@ -518,8 +526,33 @@ async function startBot() {
 ℹ️ /groupinfo — Group information
 👥 /members — Member count
 👑 /admins — Admin list
+🌐 /website — Official Website
 
 ❤️ Play Point League
+`
+              }
+            );
+
+          }
+
+
+          // ==================================
+          // 🌐 /WEBSITE
+          // ==================================
+
+          else if (
+            command === "/website"
+          ) {
+
+            await sock.sendMessage(
+              remoteJid,
+              {
+                text: `
+🌐 *আমাদের অফিসিয়াল ওয়েবসাইট* 👇
+
+🔗 ${WEBSITE_URL}
+
+❤️ *X-Cyber*
 `
               }
             );
@@ -681,7 +714,6 @@ async function startBot() {
             );
 
           }
-
 
         } catch (error) {
 
