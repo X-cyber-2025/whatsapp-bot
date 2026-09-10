@@ -1,12 +1,14 @@
 import http from "http";
 
 import makeWASocket, {
+  Browsers,
   DisconnectReason,
   useMultiFileAuthState
 } from "@whiskeysockets/baileys";
 
 import { Boom } from "@hapi/boom";
 import P from "pino";
+
 
 // ==========================================
 // 🌐 RENDER SERVER
@@ -29,11 +31,8 @@ http.createServer((req, res) => {
 // ⚙️ BOT SETTINGS
 // ==========================================
 
-const PREFIX = "/";
-
 const AUTH_FOLDER = "./auth_info";
 
-// Render Environment Variable থেকে WhatsApp Number নেওয়া হবে
 const PHONE_NUMBER = process.env.PHONE_NUMBER;
 
 
@@ -91,13 +90,15 @@ const WELCOME = `
 
 async function startBot() {
 
+  console.log("");
+  console.log("🚀 WhatsApp Bot Starting...");
+  console.log("");
+
+
   try {
 
-    console.log("🚀 WhatsApp Bot Starting...");
-
-
     // ======================================
-    // 🔐 AUTHENTICATION
+    // 🔐 AUTH
     // ======================================
 
     const {
@@ -107,36 +108,48 @@ async function startBot() {
 
 
     // ======================================
-    // 📱 PAIRING CODE CONTROL
+    // 📱 PAIRING CONTROL
     // ======================================
 
     let pairingCodeRequested = false;
 
+    let reconnecting = false;
+
 
     // ======================================
-    // 🔌 CREATE WHATSAPP SOCKET
+    // 🔌 CREATE SOCKET
     // ======================================
 
     const sock = makeWASocket({
 
       auth: state,
 
-      // Terminal-এ QR দেখাবে না
-      printQRInTerminal: false,
-
-      // Silent logger
       logger: P({
         level: "silent"
-      })
+      }),
+
+      printQRInTerminal: false,
+
+      // Pairing Code-এর জন্য browser profile
+      browser: Browsers.ubuntu("Chrome"),
+
+      // Connection timeout
+      connectTimeoutMs: 60000,
+
+      // Keep connection alive
+      keepAliveIntervalMs: 25000
 
     });
 
 
     // ======================================
-    // 💾 SAVE LOGIN INFORMATION
+    // 💾 SAVE CREDENTIALS
     // ======================================
 
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on(
+      "creds.update",
+      saveCreds
+    );
 
 
     // ======================================
@@ -155,7 +168,7 @@ async function startBot() {
 
 
         // ==================================
-        // 📱 PHONE NUMBER PAIRING CODE
+        // 📱 PAIRING CODE
         // ==================================
 
         if (
@@ -167,13 +180,8 @@ async function startBot() {
 
           pairingCodeRequested = true;
 
-          try {
 
-            // শুধু Number রাখা হবে
-            // +8801712345678
-            // অথবা
-            // 8801712345678
-            // দুটোই কাজ করবে
+          try {
 
             const number =
               PHONE_NUMBER.replace(/\D/g, "");
@@ -182,38 +190,54 @@ async function startBot() {
             if (!number) {
 
               throw new Error(
-                "PHONE_NUMBER সঠিকভাবে দেওয়া হয়নি।"
+                "PHONE_NUMBER পাওয়া যায়নি। Render Environment-এ PHONE_NUMBER সেট করুন।"
               );
 
             }
 
 
             console.log("");
-            console.log("=================================");
-            console.log("📱 WhatsApp Pairing Code তৈরি হচ্ছে...");
-            console.log("=================================");
+            console.log(
+              "📱 WhatsApp Pairing Code তৈরি হচ্ছে..."
+            );
 
 
-            // Pairing Code Request
             const code =
-              await sock.requestPairingCode(number);
+              await sock.requestPairingCode(
+                number
+              );
 
 
-            // Code-কে ৪+৪ করে দেখানো হবে
             const formattedCode =
-              code?.match(/.{1,4}/g)?.join("-") || code;
+              code
+                ?.match(/.{1,4}/g)
+                ?.join("-") || code;
 
 
-            console.log("");
-            console.log("=================================");
-            console.log("📱 WHATSAPP PAIRING CODE");
-            console.log("=================================");
-            console.log(`🔑 ${formattedCode}`);
-            console.log(`🔑 Raw Code: ${code}`);
-            console.log("=================================");
             console.log("");
             console.log(
-              "📲 WhatsApp → Settings → Linked Devices"
+              "=========================================="
+            );
+            console.log(
+              "📱 WHATSAPP PAIRING CODE"
+            );
+            console.log(
+              "=========================================="
+            );
+            console.log(
+              `🔑 ${formattedCode}`
+            );
+            console.log(
+              `🔑 Raw Code: ${code}`
+            );
+            console.log(
+              "=========================================="
+            );
+            console.log(
+              "📲 WhatsApp → Settings"
+            );
+            console.log(
+              "➡️ Linked Devices"
             );
             console.log(
               "➡️ Link a device"
@@ -222,19 +246,22 @@ async function startBot() {
               "➡️ Link with phone number instead"
             );
             console.log(
-              "➡️ উপরের Code লিখুন"
+              "=========================================="
             );
             console.log("");
-            console.log("=================================");
 
           } catch (error) {
 
             console.log("");
-            console.log("❌ Pairing Code Error:");
-            console.log(error);
+            console.log(
+              "❌ Pairing Code তৈরি করা যায়নি।"
+            );
+            console.log(
+              "❌ Error:",
+              error?.message || error
+            );
             console.log("");
 
-            // পরবর্তী QR event এ আবার চেষ্টা করার সুযোগ
             pairingCodeRequested = false;
 
           }
@@ -243,15 +270,21 @@ async function startBot() {
 
 
         // ==================================
-        // ✅ WHATSAPP CONNECTED
+        // ✅ CONNECTED
         // ==================================
 
         if (connection === "open") {
 
           console.log("");
-          console.log("=================================");
-          console.log("✅ WhatsApp Bot Connected!");
-          console.log("=================================");
+          console.log(
+            "=========================================="
+          );
+          console.log(
+            "✅ WhatsApp Bot Connected!"
+          );
+          console.log(
+            "=========================================="
+          );
           console.log("");
 
         }
@@ -275,28 +308,41 @@ async function startBot() {
           );
 
 
-          // যদি WhatsApp থেকে Logout না করা হয়
+          // Logout না হলে reconnect
           if (
-            statusCode !== DisconnectReason.loggedOut
+            statusCode !==
+            DisconnectReason.loggedOut
           ) {
 
-            console.log(
-              "🔄 আবার WhatsApp কানেক্ট করার চেষ্টা হচ্ছে..."
-            );
+            if (!reconnecting) {
 
-            setTimeout(() => {
-              startBot();
-            }, 3000);
+              reconnecting = true;
+
+              console.log(
+                "🔄 5 সেকেন্ড পর আবার WhatsApp কানেক্ট করার চেষ্টা হবে..."
+              );
+
+
+              setTimeout(() => {
+
+                reconnecting = false;
+
+                startBot();
+
+              }, 5000);
+
+            }
 
           } else {
 
+            console.log("");
             console.log(
-              "❌ WhatsApp লগআউট হয়েছে।"
+              "❌ WhatsApp Logout হয়েছে।"
             );
-
             console.log(
-              "📱 আবার Phone Number দিয়ে Pair করতে হবে।"
+              "📱 আবার Pairing করতে হবে।"
             );
+            console.log("");
 
           }
 
@@ -307,7 +353,7 @@ async function startBot() {
 
 
     // ==========================================
-    // 👥 GROUP PARTICIPANT UPDATE
+    // 👥 NEW GROUP MEMBER
     // ==========================================
 
     sock.ev.on(
@@ -316,29 +362,30 @@ async function startBot() {
 
         try {
 
-          // শুধু নতুন Member হলে কাজ করবে
-          if (update.action !== "add") {
+          if (
+            update.action !== "add"
+          ) {
             return;
           }
 
 
-          const groupId = update.id;
+          const groupId =
+            update.id;
 
 
-          // Group Information
           const metadata =
-            await sock.groupMetadata(groupId);
+            await sock.groupMetadata(
+              groupId
+            );
 
 
           const groupName =
             metadata.subject;
 
 
-          // একাধিক Member Join করলে
-          // সবাইকে Welcome Message পাঠাবে
-
           for (
-            const participant of update.participants
+            const participant
+            of update.participants
           ) {
 
             try {
@@ -374,7 +421,7 @@ async function startBot() {
             } catch (error) {
 
               console.log(
-                "❌ Individual Welcome Error:",
+                "❌ Welcome Message Error:",
                 error
               );
 
@@ -386,7 +433,7 @@ async function startBot() {
         } catch (error) {
 
           console.log(
-            "❌ Welcome Error:",
+            "❌ Group Welcome Error:",
             error
           );
 
@@ -406,16 +453,16 @@ async function startBot() {
 
         try {
 
-          const msg = messages[0];
+          const msg =
+            messages[0];
 
 
-          // Message না থাকলে Stop
           if (!msg?.message) {
             return;
           }
 
 
-          // Bot নিজের Message-এর Reply করবে না
+          // নিজের message ignore
           if (msg.key.fromMe) {
             return;
           }
@@ -425,10 +472,7 @@ async function startBot() {
             msg.key.remoteJid;
 
 
-          // ==================================
-          // 👥 ONLY GROUP MESSAGE
-          // ==================================
-
+          // শুধু Group
           if (
             !remoteJid ||
             !remoteJid.endsWith("@g.us")
@@ -447,10 +491,6 @@ async function startBot() {
             "";
 
 
-          // ==================================
-          // 🔎 COMMAND
-          // ==================================
-
           const command =
             messageText
               .trim()
@@ -462,7 +502,9 @@ async function startBot() {
           // 📋 /MENU
           // ==================================
 
-          if (command === "/menu") {
+          if (
+            command === "/menu"
+          ) {
 
             await sock.sendMessage(
               remoteJid,
@@ -489,7 +531,9 @@ async function startBot() {
           // 📜 /RULES
           // ==================================
 
-          else if (command === "/rules") {
+          else if (
+            command === "/rules"
+          ) {
 
             await sock.sendMessage(
               remoteJid,
@@ -505,7 +549,9 @@ async function startBot() {
           // 🏓 /PING
           // ==================================
 
-          else if (command === "/ping") {
+          else if (
+            command === "/ping"
+          ) {
 
             await sock.sendMessage(
               remoteJid,
@@ -522,7 +568,9 @@ async function startBot() {
           // 🆔 /ID
           // ==================================
 
-          else if (command === "/id") {
+          else if (
+            command === "/id"
+          ) {
 
             await sock.sendMessage(
               remoteJid,
@@ -604,7 +652,6 @@ async function startBot() {
               );
 
 
-            // Group Admin বের করা
             const adminParticipants =
               metadata.participants.filter(
                 (p) =>
@@ -613,7 +660,6 @@ async function startBot() {
               );
 
 
-            // Admin Mention তৈরি
             const admins =
               adminParticipants.map(
                 (p) =>
@@ -636,6 +682,7 @@ async function startBot() {
 
           }
 
+
         } catch (error) {
 
           console.log(
@@ -655,10 +702,11 @@ async function startBot() {
     console.log(
       "❌ Bot Start Error:"
     );
-    console.log(error);
+    console.log(
+      error?.message || error
+    );
     console.log("");
 
-    // Error হলে 5 সেকেন্ড পর আবার চেষ্টা
     setTimeout(() => {
       startBot();
     }, 5000);
@@ -669,7 +717,7 @@ async function startBot() {
 
 
 // ==========================================
-// 🚀 START BOT
+// 🚀 START
 // ==========================================
 
 startBot();
