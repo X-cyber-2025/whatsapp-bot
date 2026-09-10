@@ -16,15 +16,62 @@ import P from "pino";
 
 const PORT = process.env.PORT || 3000;
 
-http.createServer((req, res) => {
+const server = http.createServer((req, res) => {
 
-  res.writeHead(200, {
+  // ------------------------------------------
+  // 🌐 Main Page
+  // ------------------------------------------
+
+  if (req.url === "/" || req.url === "") {
+
+    res.writeHead(200, {
+      "Content-Type": "text/plain; charset=utf-8"
+    });
+
+    res.end(
+      "WhatsApp Bot is running!"
+    );
+
+    return;
+  }
+
+
+  // ------------------------------------------
+  // ❤️ Health Check
+  // ------------------------------------------
+
+  if (req.url === "/health") {
+
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8"
+    });
+
+    res.end(
+      JSON.stringify({
+        status: "ok",
+        bot: "WhatsApp Bot",
+        time: new Date().toISOString()
+      })
+    );
+
+    return;
+  }
+
+
+  // ------------------------------------------
+  // 404
+  // ------------------------------------------
+
+  res.writeHead(404, {
     "Content-Type": "text/plain; charset=utf-8"
   });
 
-  res.end("WhatsApp Bot is running!");
+  res.end("Not Found");
 
-}).listen(PORT, () => {
+});
+
+
+server.listen(PORT, () => {
 
   console.log(
     `🌐 Server running on port ${PORT}`
@@ -188,10 +235,87 @@ function getMessageText(message) {
 
 
 // ==================================================
+// 🔄 GLOBAL RECONNECT CONTROL
+// ==================================================
+
+let reconnectTimer = null;
+
+let botStarting = false;
+
+let currentSocket = null;
+
+
+// ==================================================
+// 🔄 SCHEDULE RECONNECT
+// ==================================================
+
+function scheduleReconnect(delay = 5000) {
+
+  // ------------------------------------------
+  // Already scheduled
+  // ------------------------------------------
+
+  if (reconnectTimer) {
+
+    console.log(
+      "ℹ️ Reconnect already scheduled."
+    );
+
+    return;
+
+  }
+
+
+  console.log("");
+  console.log(
+    `🔄 ${delay / 1000} সেকেন্ড পর Reconnect করা হবে...`
+  );
+  console.log("");
+
+
+  reconnectTimer = setTimeout(
+    async () => {
+
+      reconnectTimer = null;
+
+      console.log("");
+      console.log(
+        "🔄 Reconnecting WhatsApp..."
+      );
+      console.log("");
+
+      await startBot();
+
+    },
+    delay
+  );
+
+}
+
+
+// ==================================================
 // 🤖 START BOT
 // ==================================================
 
 async function startBot() {
+
+  // ------------------------------------------
+  // Prevent duplicate start
+  // ------------------------------------------
+
+  if (botStarting) {
+
+    console.log(
+      "ℹ️ Bot already starting. Duplicate start বন্ধ করা হয়েছে।"
+    );
+
+    return;
+
+  }
+
+
+  botStarting = true;
+
 
   console.log("");
   console.log("==========================================");
@@ -256,8 +380,6 @@ async function startBot() {
 
     let pairingCodeRequested = false;
 
-    let reconnectTimer = null;
-
 
     // ==================================================
     // 🔌 CREATE SOCKET
@@ -278,9 +400,18 @@ async function startBot() {
 
       connectTimeoutMs: 60000,
 
-      keepAliveIntervalMs: 25000
+      keepAliveIntervalMs: 25000,
+
+      retryRequestDelayMs: 2000,
+
+      markOnlineOnConnect: true
 
     });
+
+
+    // Save current socket
+
+    currentSocket = sock;
 
 
     // ==================================================
@@ -335,6 +466,7 @@ async function startBot() {
         try {
 
           pairingCodeRequested = true;
+
 
           const number =
             PHONE_NUMBER.replace(
@@ -446,12 +578,29 @@ async function startBot() {
 
 
         // ==================================================
+        // 🟢 CONNECTING
+        // ==================================================
+
+        if (
+          connection === "connecting"
+        ) {
+
+          console.log(
+            "🔄 WhatsApp connecting..."
+          );
+
+        }
+
+
+        // ==================================================
         // ✅ CONNECTED
         // ==================================================
 
         if (
           connection === "open"
         ) {
+
+          botStarting = false;
 
           console.log("");
           console.log(
@@ -474,6 +623,10 @@ async function startBot() {
           }
 
 
+          console.log(
+            "🟢 Bot Status: ONLINE"
+          );
+
           console.log("");
 
         }
@@ -486,6 +639,9 @@ async function startBot() {
         if (
           connection === "close"
         ) {
+
+          botStarting = false;
+
 
           const statusCode =
             new Boom(
@@ -531,30 +687,19 @@ async function startBot() {
 
 
           // ==================================================
-          // 🔄 AUTO RECONNECT
+          // 🔄 RECONNECT
           // ==================================================
 
-          if (!reconnectTimer) {
+          console.log(
+            "🔄 Connection বন্ধ হয়েছে।"
+          );
 
-            console.log(
-              "🔄 5 সেকেন্ড পর Reconnect করা হবে..."
-            );
+          console.log(
+            "🔄 Automatic Reconnect চালু হচ্ছে..."
+          );
 
 
-            reconnectTimer =
-              setTimeout(() => {
-
-                reconnectTimer = null;
-
-                console.log(
-                  "🔄 Reconnecting WhatsApp..."
-                );
-
-                startBot();
-
-              }, 5000);
-
-          }
+          scheduleReconnect(5000);
 
         }
 
@@ -1256,6 +1401,9 @@ async function startBot() {
 
   } catch (error) {
 
+    botStarting = false;
+
+
     console.log("");
     console.log(
       "=========================================="
@@ -1279,19 +1427,98 @@ async function startBot() {
     // 🔄 Start Error হলে আবার চেষ্টা
     // ------------------------------------------
 
-    setTimeout(() => {
-
-      console.log(
-        "🔄 Restarting Bot..."
-      );
-
-      startBot();
-
-    }, 5000);
+    scheduleReconnect(5000);
 
   }
 
 }
+
+
+// ==================================================
+// 💥 GLOBAL ERROR HANDLING
+// ==================================================
+
+process.on(
+  "uncaughtException",
+  (error) => {
+
+    console.log("");
+    console.log(
+      "❌ UNCAUGHT EXCEPTION"
+    );
+
+    console.log(
+      error?.message ||
+      error
+    );
+
+    console.log("");
+
+    // Process সঙ্গে সঙ্গে বন্ধ না করে
+    // reconnect করার সুযোগ দেওয়া হচ্ছে
+
+    scheduleReconnect(5000);
+
+  }
+);
+
+
+process.on(
+  "unhandledRejection",
+  (reason) => {
+
+    console.log("");
+    console.log(
+      "❌ UNHANDLED PROMISE REJECTION"
+    );
+
+    console.log(
+      reason?.message ||
+      reason
+    );
+
+    console.log("");
+
+  }
+);
+
+
+// ==================================================
+// 🛑 RENDER / SERVER SHUTDOWN
+// ==================================================
+
+process.on(
+  "SIGTERM",
+  () => {
+
+    console.log("");
+    console.log(
+      "🛑 SIGTERM received."
+    );
+
+    console.log(
+      "🛑 Render server shutdown করছে..."
+    );
+
+    console.log("");
+
+  }
+);
+
+
+process.on(
+  "SIGINT",
+  () => {
+
+    console.log("");
+    console.log(
+      "🛑 SIGINT received."
+    );
+
+    console.log("");
+
+  }
+);
 
 
 // ==================================================
