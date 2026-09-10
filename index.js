@@ -174,10 +174,10 @@ function saveContacts(contacts) {
 
 
     const name =
+      contact.username ||
       contact.notify ||
       contact.name ||
       contact.verifiedName ||
-      contact.pushName ||
       "";
 
 
@@ -190,20 +190,14 @@ function saveContacts(contacts) {
         name.trim();
 
 
-      // ------------------------------------------
       // Main ID
-      // ------------------------------------------
-
       contactNames.set(
         contact.id,
         cleanName
       );
 
 
-      // ------------------------------------------
-      // LID Mapping
-      // ------------------------------------------
-
+      // LID
       if (contact.lid) {
 
         contactNames.set(
@@ -214,10 +208,7 @@ function saveContacts(contacts) {
       }
 
 
-      // ------------------------------------------
-      // Phone JID Mapping
-      // ------------------------------------------
-
+      // Phone number
       if (contact.phoneNumber) {
 
         contactNames.set(
@@ -235,10 +226,13 @@ function saveContacts(contacts) {
 
 
 // ==================================================
-// 👤 CACHE PUSH NAME
+// 👤 SAVE PUSH NAME
 // ==================================================
 
-function savePushName(id, pushName) {
+function savePushName(
+  id,
+  pushName
+) {
 
   if (
     !id ||
@@ -259,10 +253,16 @@ function savePushName(id, pushName) {
   }
 
 
-  contactNames.set(
-    id,
-    cleanName
-  );
+  if (
+    !contactNames.has(id)
+  ) {
+
+    contactNames.set(
+      id,
+      cleanName
+    );
+
+  }
 
 }
 
@@ -301,27 +301,53 @@ function getDisplayName(participant) {
 
 
   // ------------------------------------------
-  // 2️⃣ Participant Name
+  // 2️⃣ Username
   // ------------------------------------------
 
-  const participantName =
+  const username =
+    participant.username;
+
+
+  if (
+    username &&
+    username.trim()
+  ) {
+
+    const cleanUsername =
+      username.trim();
+
+
+    contactNames.set(
+      id,
+      cleanUsername
+    );
+
+
+    return cleanUsername;
+
+  }
+
+
+  // ------------------------------------------
+  // 3️⃣ Display Name
+  // ------------------------------------------
+
+  const name =
     participant.notify ||
     participant.name ||
     participant.verifiedName ||
-    participant.pushName ||
     "";
 
 
   if (
-    participantName &&
-    participantName.trim()
+    name &&
+    name.trim()
   ) {
 
     const cleanName =
-      participantName.trim();
+      name.trim();
 
 
-    // Save for future use
     contactNames.set(
       id,
       cleanName
@@ -334,7 +360,40 @@ function getDisplayName(participant) {
 
 
   // ------------------------------------------
-  // 3️⃣ Phone JID
+  // 4️⃣ Phone Number
+  // ------------------------------------------
+
+  const phoneNumber =
+    participant.phoneNumber;
+
+
+  if (phoneNumber) {
+
+    const number =
+      phoneNumber
+        .replace(
+          "@s.whatsapp.net",
+          ""
+        )
+        .trim();
+
+
+    if (
+      number &&
+      /^\+?\d+$/.test(number)
+    ) {
+
+      return number.startsWith("+")
+        ? number
+        : `+${number}`;
+
+    }
+
+  }
+
+
+  // ------------------------------------------
+  // 5️⃣ Normal WhatsApp JID
   // ------------------------------------------
 
   if (
@@ -360,13 +419,11 @@ function getDisplayName(participant) {
 
 
   // ------------------------------------------
-  // 4️⃣ LID
+  // 6️⃣ LID
   // ------------------------------------------
 
-  // LID-এর numeric অংশকে phone number
-  // হিসেবে দেখানো হবে না।
-  //
-  // কারণ LID আসল phone number নয়।
+  // LID-এর সংখ্যা phone number নয়।
+  // তাই LID-কে fake phone number হিসেবে দেখানো হবে না।
 
   if (
     id.endsWith("@lid")
@@ -391,6 +448,7 @@ function getMessageText(message) {
   if (!message) {
     return "";
   }
+
 
   return (
     message.conversation ||
@@ -419,7 +477,9 @@ let currentSocket = null;
 // 🔄 SCHEDULE RECONNECT
 // ==================================================
 
-function scheduleReconnect(delay = 5000) {
+function scheduleReconnect(
+  delay = 5000
+) {
 
   if (reconnectTimer) {
 
@@ -431,28 +491,37 @@ function scheduleReconnect(delay = 5000) {
 
   }
 
+
   console.log("");
+
   console.log(
     `🔄 ${delay / 1000} সেকেন্ড পর Reconnect করা হবে...`
   );
+
   console.log("");
 
-  reconnectTimer = setTimeout(
-    async () => {
 
-      reconnectTimer = null;
+  reconnectTimer =
+    setTimeout(
+      async () => {
 
-      console.log("");
-      console.log(
-        "🔄 Reconnecting WhatsApp..."
-      );
-      console.log("");
+        reconnectTimer = null;
 
-      await startBot();
 
-    },
-    delay
-  );
+        console.log("");
+
+        console.log(
+          "🔄 Reconnecting WhatsApp..."
+        );
+
+        console.log("");
+
+
+        await startBot();
+
+      },
+      delay
+    );
 
 }
 
@@ -473,13 +542,22 @@ async function startBot() {
 
   }
 
+
   botStarting = true;
 
+
   console.log("");
-  console.log("==========================================");
-  console.log("🚀 WhatsApp Bot Starting...");
-  console.log("==========================================");
+  console.log(
+    "=========================================="
+  );
+  console.log(
+    "🚀 WhatsApp Bot Starting..."
+  );
+  console.log(
+    "=========================================="
+  );
   console.log("");
+
 
   try {
 
@@ -490,9 +568,10 @@ async function startBot() {
     const {
       state,
       saveCreds
-    } = await useMultiFileAuthState(
-      AUTH_FOLDER
-    );
+    } =
+      await useMultiFileAuthState(
+        AUTH_FOLDER
+      );
 
 
     // ==================================================
@@ -506,7 +585,7 @@ async function startBot() {
       );
 
       console.log(
-        "👉 SillyDev .env ফাইলে PHONE_NUMBER সেট করুন।"
+        "👉 .env ফাইলে PHONE_NUMBER সেট করুন।"
       );
 
     }
@@ -542,31 +621,33 @@ async function startBot() {
     // 🔌 CREATE SOCKET
     // ==================================================
 
-    const sock = makeWASocket({
+    const sock =
+      makeWASocket({
 
-      auth: state,
+        auth: state,
 
-      logger: P({
-        level: "silent"
-      }),
+        logger: P({
+          level: "silent"
+        }),
 
-      printQRInTerminal: false,
+        printQRInTerminal: false,
 
-      browser:
-        Browsers.ubuntu("Chrome"),
+        browser:
+          Browsers.ubuntu("Chrome"),
 
-      connectTimeoutMs: 60000,
+        connectTimeoutMs: 60000,
 
-      keepAliveIntervalMs: 25000,
+        keepAliveIntervalMs: 25000,
 
-      retryRequestDelayMs: 2000,
+        retryRequestDelayMs: 2000,
 
-      markOnlineOnConnect: true
+        markOnlineOnConnect: true
 
-    });
+      });
 
 
-    currentSocket = sock;
+    currentSocket =
+      sock;
 
 
     // ==================================================
@@ -587,7 +668,9 @@ async function startBot() {
       "contacts.upsert",
       (contacts) => {
 
-        saveContacts(contacts);
+        saveContacts(
+          contacts
+        );
 
       }
     );
@@ -597,7 +680,9 @@ async function startBot() {
       "contacts.update",
       (contacts) => {
 
-        saveContacts(contacts);
+        saveContacts(
+          contacts
+        );
 
       }
     );
@@ -612,107 +697,117 @@ async function startBot() {
       PHONE_NUMBER
     ) {
 
-      setTimeout(async () => {
+      setTimeout(
+        async () => {
 
-        if (pairingCodeRequested) {
-          return;
-        }
-
-        try {
-
-          pairingCodeRequested = true;
-
-          const number =
-            PHONE_NUMBER.replace(
-              /\D/g,
-              ""
-            );
-
-
-          if (!number) {
-
-            throw new Error(
-              "PHONE_NUMBER সঠিক নয়।"
-            );
-
+          if (pairingCodeRequested) {
+            return;
           }
 
 
-          console.log("");
-          console.log(
-            "📱 WhatsApp Pairing Code তৈরি হচ্ছে..."
-          );
-          console.log("");
+          try {
+
+            pairingCodeRequested =
+              true;
 
 
-          const code =
-            await sock.requestPairingCode(
-              number
+            const number =
+              PHONE_NUMBER.replace(
+                /\D/g,
+                ""
+              );
+
+
+            if (!number) {
+
+              throw new Error(
+                "PHONE_NUMBER সঠিক নয়।"
+              );
+
+            }
+
+
+            console.log("");
+            console.log(
+              "📱 WhatsApp Pairing Code তৈরি হচ্ছে..."
+            );
+            console.log("");
+
+
+            const code =
+              await sock.requestPairingCode(
+                number
+              );
+
+
+            const formattedCode =
+              code
+                ?.match(/.{1,4}/g)
+                ?.join("-") ||
+              code;
+
+
+            console.log("");
+            console.log(
+              "=========================================="
+            );
+            console.log(
+              "📱 WHATSAPP PAIRING CODE"
+            );
+            console.log(
+              "=========================================="
+            );
+            console.log(
+              `🔑 ${formattedCode}`
+            );
+            console.log(
+              "=========================================="
+            );
+            console.log(
+              "📲 WhatsApp → Settings"
+            );
+            console.log(
+              "➡️ Linked Devices"
+            );
+            console.log(
+              "➡️ Link a device"
+            );
+            console.log(
+              "➡️ Link with phone number instead"
+            );
+            console.log(
+              `➡️ Pairing Code: ${formattedCode}`
+            );
+            console.log(
+              "=========================================="
+            );
+            console.log("");
+
+          } catch (error) {
+
+            pairingCodeRequested =
+              false;
+
+
+            console.log("");
+
+            console.log(
+              "❌ Pairing Code তৈরি করা যায়নি।"
             );
 
+            console.log(
+              "❌ Error:",
+              error?.message ||
+              error
+            );
 
-          const formattedCode =
-            code
-              ?.match(/.{1,4}/g)
-              ?.join("-") ||
-            code;
+            console.log("");
 
+          }
 
-          console.log("");
-          console.log(
-            "=========================================="
-          );
-          console.log(
-            "📱 WHATSAPP PAIRING CODE"
-          );
-          console.log(
-            "=========================================="
-          );
-          console.log(
-            `🔑 ${formattedCode}`
-          );
-          console.log(
-            "=========================================="
-          );
-          console.log(
-            "📲 WhatsApp → Settings"
-          );
-          console.log(
-            "➡️ Linked Devices"
-          );
-          console.log(
-            "➡️ Link a device"
-          );
-          console.log(
-            "➡️ Link with phone number instead"
-          );
-          console.log(
-            `➡️ Pairing Code: ${formattedCode}`
-          );
-          console.log(
-            "=========================================="
-          );
-          console.log("");
-
-        } catch (error) {
-
-          pairingCodeRequested = false;
-
-          console.log("");
-          console.log(
-            "❌ Pairing Code তৈরি করা যায়নি।"
-          );
-
-          console.log(
-            "❌ Error:",
-            error?.message || error
-          );
-
-          console.log("");
-
-        }
-
-      }, 3000);
+        },
+        3000
+      );
 
     }
 
@@ -754,7 +849,9 @@ async function startBot() {
           connection === "open"
         ) {
 
-          botStarting = false;
+          botStarting =
+            false;
+
 
           console.log("");
           console.log(
@@ -794,7 +891,8 @@ async function startBot() {
           connection === "close"
         ) {
 
-          botStarting = false;
+          botStarting =
+            false;
 
 
           const statusCode =
@@ -818,9 +916,9 @@ async function startBot() {
           );
 
 
-          // ==================================================
+          // ------------------------------------------
           // 🚪 LOGGED OUT
-          // ==================================================
+          // ------------------------------------------
 
           if (
             statusCode ===
@@ -840,9 +938,9 @@ async function startBot() {
           }
 
 
-          // ==================================================
+          // ------------------------------------------
           // 🔄 RECONNECT
-          // ==================================================
+          // ------------------------------------------
 
           console.log(
             "🔄 Connection বন্ধ হয়েছে।"
@@ -853,7 +951,9 @@ async function startBot() {
           );
 
 
-          scheduleReconnect(5000);
+          scheduleReconnect(
+            5000
+          );
 
         }
 
@@ -1071,6 +1171,10 @@ async function startBot() {
               }
 
 
+              // ----------------------------------------
+              // 🎯 GROUP RESTRICTION
+              // ----------------------------------------
+
               if (
                 GROUP_ID &&
                 remoteJid !== GROUP_ID
@@ -1279,78 +1383,269 @@ async function startBot() {
                 command === "/admins"
               ) {
 
-                const metadata =
-                  await sock.groupMetadata(
-                    remoteJid
+                try {
+
+                  // ------------------------------------------
+                  // 🔄 Get FRESH group metadata
+                  // ------------------------------------------
+
+                  const metadata =
+                    await sock.groupMetadata(
+                      remoteJid
+                    );
+
+
+                  const participants =
+                    metadata?.participants || [];
+
+
+                  console.log("");
+                  console.log(
+                    "=========================================="
+                  );
+                  console.log(
+                    "🔍 Searching Group Admins..."
+                  );
+                  console.log(
+                    `👥 Total Participants: ${participants.length}`
+                  );
+                  console.log(
+                    "=========================================="
                   );
 
 
-                const adminParticipants =
-                  metadata.participants.filter(
-                    (p) =>
-                      p.admin === "admin" ||
-                      p.admin === "superadmin"
-                  );
+                  // ------------------------------------------
+                  // 👑 Find ONLY Admins
+                  // ------------------------------------------
+
+                  const admins =
+                    participants.filter(
+                      (participant) =>
+                        participant.admin === "admin" ||
+                        participant.admin === "superadmin"
+                    );
 
 
-                if (
-                  adminParticipants.length === 0
-                ) {
+                  if (
+                    admins.length === 0
+                  ) {
+
+                    console.log(
+                      "❌ No Admin found."
+                    );
+
+
+                    await sock.sendMessage(
+                      remoteJid,
+                      {
+                        text:
+                          "👑 কোনো Admin পাওয়া যায়নি।"
+                      }
+                    );
+
+
+                    continue;
+
+                  }
+
+
+                  // ------------------------------------------
+                  // 🆔 Extract REAL participant IDs
+                  // ------------------------------------------
+
+                  const adminData =
+                    admins
+                      .map(
+                        (participant) => {
+
+                          const id =
+                            participant.id;
+
+
+                          if (!id) {
+                            return null;
+                          }
+
+
+                          // --------------------------------
+                          // Name priority
+                          // --------------------------------
+
+                          const name =
+                            participant.username ||
+                            participant.notify ||
+                            participant.name ||
+                            participant.verifiedName ||
+                            contactNames.get(id) ||
+                            "";
+
+
+                          return {
+
+                            id,
+
+                            name:
+                              name.trim() ||
+                              "Admin",
+
+                            role:
+                              participant.admin
+
+                          };
+
+                        }
+                      )
+                      .filter(Boolean);
+
+
+                  // ------------------------------------------
+                  // ❌ No valid IDs
+                  // ------------------------------------------
+
+                  if (
+                    adminData.length === 0
+                  ) {
+
+                    await sock.sendMessage(
+                      remoteJid,
+                      {
+                        text:
+                          "❌ Admin পাওয়া গেছে, কিন্তু valid participant ID পাওয়া যায়নি।"
+                      }
+                    );
+
+
+                    continue;
+
+                  }
+
+
+                  // ------------------------------------------
+                  // 🎯 ACTUAL IDs FOR MENTIONS
+                  // ------------------------------------------
+
+                  const mentions =
+                    adminData.map(
+                      (admin) =>
+                        admin.id
+                    );
+
+
+                  // ------------------------------------------
+                  // 📝 Create visible Admin list
+                  // ------------------------------------------
+
+                  const adminLines =
+                    adminData.map(
+                      (admin, index) => {
+
+                        const role =
+                          admin.role ===
+                          "superadmin"
+
+                            ? "👑 Super Admin"
+
+                            : "🛡️ Admin";
+
+
+                        return (
+                          `${index + 1}️⃣ @${admin.name} — ${role}`
+                        );
+
+                      }
+                    );
+
+
+                  // ------------------------------------------
+                  // 📤 SEND ACTUAL MENTIONS
+                  // ------------------------------------------
 
                   await sock.sendMessage(
                     remoteJid,
                     {
                       text:
-                        "👑 কোনো Admin পাওয়া যায়নি।"
+                        `👑 *GROUP ADMINS*\n\n${adminLines.join("\n")}\n\n❤️ *Piyas*`,
+
+                      mentions
                     }
                   );
 
-                  continue;
+
+                  // ------------------------------------------
+                  // 🖥️ SHOW EXACT IDS IN RENDER LOG
+                  // ------------------------------------------
+
+                  console.log(
+                    "=========================================="
+                  );
+                  console.log(
+                    "👑 GROUP ADMIN IDs"
+                  );
+                  console.log(
+                    "=========================================="
+                  );
+
+
+                  for (
+                    const admin
+                    of adminData
+                  ) {
+
+                    console.log(
+                      `👤 Name: ${admin.name}`
+                    );
+
+                    console.log(
+                      `🆔 ID: ${admin.id}`
+                    );
+
+                    console.log(
+                      `🔐 Role: ${admin.role}`
+                    );
+
+                    console.log(
+                      "------------------------------------------"
+                    );
+
+                  }
+
+
+                  console.log(
+                    "=========================================="
+                  );
+                  console.log(
+                    "✅ Admin mention message sent."
+                  );
+                  console.log(
+                    "=========================================="
+                  );
+                  console.log("");
+
+
+                } catch (adminError) {
+
+                  console.log("");
+                  console.log(
+                    "❌ /admins Error:"
+                  );
+
+                  console.log(
+                    adminError?.message ||
+                    adminError
+                  );
+
+                  console.log("");
+
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        "❌ Admin list বের করতে সমস্যা হয়েছে।"
+                    }
+                  );
 
                 }
-
-
-                // ------------------------------------------
-                // 👑 ADMIN LIST
-                // ------------------------------------------
-
-                const admins =
-                  adminParticipants.map(
-                    (p, index) => {
-
-                      const name =
-                        getDisplayName(p);
-
-
-                      return (
-                        `${index + 1}️⃣ @${name}`
-                      );
-
-                    }
-                  );
-
-
-                // ------------------------------------------
-                // 📌 ACTUAL WHATSAPP MENTIONS
-                // ------------------------------------------
-
-                const mentions =
-                  adminParticipants
-                    .map(
-                      (p) => p.id
-                    )
-                    .filter(Boolean);
-
-
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      `👑 *GROUP ADMINS*\n\n${admins.join("\n")}\n\n❤️ *Piyas*`,
-
-                    mentions
-                  }
-                );
 
               }
 
@@ -1386,6 +1681,7 @@ async function startBot() {
                     }
                   );
 
+
                   continue;
 
                 }
@@ -1398,7 +1694,9 @@ async function startBot() {
                       const name =
                         getDisplayName(p);
 
+
                       return {
+
                         number:
                           index + 1,
 
@@ -1407,6 +1705,7 @@ async function startBot() {
 
                         id:
                           p.id
+
                       };
 
                     }
@@ -1464,6 +1763,7 @@ async function startBot() {
 
                     currentMessage =
                       header;
+
 
                     currentMentions =
                       [];
@@ -1551,7 +1851,8 @@ async function startBot() {
 
   } catch (error) {
 
-    botStarting = false;
+    botStarting =
+      false;
 
 
     console.log("");
@@ -1572,7 +1873,10 @@ async function startBot() {
 
     console.log("");
 
-    scheduleReconnect(5000);
+
+    scheduleReconnect(
+      5000
+    );
 
   }
 
@@ -1599,7 +1903,10 @@ process.on(
 
     console.log("");
 
-    scheduleReconnect(5000);
+
+    scheduleReconnect(
+      5000
+    );
 
   }
 );
