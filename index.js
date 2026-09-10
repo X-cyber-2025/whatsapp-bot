@@ -17,13 +17,19 @@ import P from "pino";
 const PORT = process.env.PORT || 3000;
 
 http.createServer((req, res) => {
+
   res.writeHead(200, {
     "Content-Type": "text/plain; charset=utf-8"
   });
 
   res.end("WhatsApp Bot is running!");
+
 }).listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
+
+  console.log(
+    `🌐 Server running on port ${PORT}`
+  );
+
 });
 
 
@@ -99,6 +105,67 @@ const WELCOME = `
 
 
 // ==================================================
+// 👤 CONTACT NAME CACHE
+// ==================================================
+
+const contactNames = new Map();
+
+
+function saveContacts(contacts) {
+
+  for (const contact of contacts || []) {
+
+    if (!contact?.id) {
+      continue;
+    }
+
+    const name =
+      contact.notify ||
+      contact.name ||
+      contact.verifiedName ||
+      "";
+
+    if (name) {
+
+      contactNames.set(
+        contact.id,
+        name
+      );
+
+    }
+
+  }
+
+}
+
+
+// ==================================================
+// 👤 GET DISPLAY NAME
+// ==================================================
+
+function getDisplayName(participant) {
+
+  if (!participant?.id) {
+    return "Unknown Member";
+  }
+
+  const name =
+    contactNames.get(participant.id) ||
+    participant.notify ||
+    participant.name ||
+    participant.verifiedName ||
+    "";
+
+  if (!name) {
+    return "Unknown Member";
+  }
+
+  return name.trim();
+
+}
+
+
+// ==================================================
 // 🧹 TEXT CLEANER
 // ==================================================
 
@@ -116,6 +183,7 @@ function getMessageText(message) {
     message.documentMessage?.caption ||
     ""
   ).trim();
+
 }
 
 
@@ -141,11 +209,13 @@ async function startBot() {
     const {
       state,
       saveCreds
-    } = await useMultiFileAuthState(AUTH_FOLDER);
+    } = await useMultiFileAuthState(
+      AUTH_FOLDER
+    );
 
 
     // ==================================================
-    // 🔍 BASIC CONFIG CHECK
+    // 🔍 CONFIG CHECK
     // ==================================================
 
     if (!PHONE_NUMBER) {
@@ -168,11 +238,7 @@ async function startBot() {
       );
 
       console.log(
-        "👉 Bot সব Group-এর command গ্রহণ করতে পারে।"
-      );
-
-      console.log(
-        "🔐 নির্দিষ্ট Group restriction চাইলে GROUP_ID সেট করুন।"
+        "⚠️ নির্দিষ্ট Group restriction কাজ করবে না।"
       );
 
     } else {
@@ -207,7 +273,8 @@ async function startBot() {
 
       printQRInTerminal: false,
 
-      browser: Browsers.ubuntu("Chrome"),
+      browser:
+        Browsers.ubuntu("Chrome"),
 
       connectTimeoutMs: 60000,
 
@@ -223,6 +290,30 @@ async function startBot() {
     sock.ev.on(
       "creds.update",
       saveCreds
+    );
+
+
+    // ==================================================
+    // 👤 CONTACT UPDATE
+    // ==================================================
+
+    sock.ev.on(
+      "contacts.upsert",
+      (contacts) => {
+
+        saveContacts(contacts);
+
+      }
+    );
+
+
+    sock.ev.on(
+      "contacts.update",
+      (contacts) => {
+
+        saveContacts(contacts);
+
+      }
     );
 
 
@@ -246,7 +337,10 @@ async function startBot() {
           pairingCodeRequested = true;
 
           const number =
-            PHONE_NUMBER.replace(/\D/g, "");
+            PHONE_NUMBER.replace(
+              /\D/g,
+              ""
+            );
 
 
           if (!number) {
@@ -274,7 +368,8 @@ async function startBot() {
           const formattedCode =
             code
               ?.match(/.{1,4}/g)
-              ?.join("-") || code;
+              ?.join("-") ||
+            code;
 
 
           console.log("");
@@ -321,10 +416,12 @@ async function startBot() {
           console.log(
             "❌ Pairing Code তৈরি করা যায়নি।"
           );
+
           console.log(
             "❌ Error:",
             error?.message || error
           );
+
           console.log("");
 
         }
@@ -352,7 +449,9 @@ async function startBot() {
         // ✅ CONNECTED
         // ==================================================
 
-        if (connection === "open") {
+        if (
+          connection === "open"
+        ) {
 
           console.log("");
           console.log(
@@ -365,6 +464,7 @@ async function startBot() {
             "=========================================="
           );
 
+
           if (GROUP_ID) {
 
             console.log(
@@ -372,6 +472,7 @@ async function startBot() {
             );
 
           }
+
 
           console.log("");
 
@@ -382,7 +483,9 @@ async function startBot() {
         // ❌ CONNECTION CLOSED
         // ==================================================
 
-        if (connection === "close") {
+        if (
+          connection === "close"
+        ) {
 
           const statusCode =
             new Boom(
@@ -395,7 +498,7 @@ async function startBot() {
             "=========================================="
           );
           console.log(
-            `⚠️ WhatsApp Connection Closed`
+            "⚠️ WhatsApp Connection Closed"
           );
           console.log(
             `⚠️ Status Code: ${statusCode}`
@@ -405,9 +508,9 @@ async function startBot() {
           );
 
 
-          // ------------------------------------------
+          // ==================================================
           // 🚪 LOGGED OUT
-          // ------------------------------------------
+          // ==================================================
 
           if (
             statusCode ===
@@ -423,12 +526,13 @@ async function startBot() {
             );
 
             return;
+
           }
 
 
-          // ------------------------------------------
+          // ==================================================
           // 🔄 AUTO RECONNECT
-          // ------------------------------------------
+          // ==================================================
 
           if (!reconnectTimer) {
 
@@ -475,7 +579,9 @@ async function startBot() {
           if (
             update.action !== "add"
           ) {
+
             return;
+
           }
 
 
@@ -493,6 +599,7 @@ async function startBot() {
           ) {
 
             return;
+
           }
 
 
@@ -514,14 +621,25 @@ async function startBot() {
             try {
 
               const memberName =
-                participant.split("@")[0];
+                getDisplayName({
+                  id: participant
+                });
+
+
+              const mentionText =
+                memberName ===
+                "Unknown Member"
+
+                  ? "@New Member"
+
+                  : `@${memberName}`;
 
 
               const message =
                 WELCOME
                   .replace(
                     "{member}",
-                    `@${memberName}`
+                    mentionText
                   )
                   .replace(
                     "{group}",
@@ -550,7 +668,8 @@ async function startBot() {
 
               console.log(
                 "❌ Welcome Message Error:",
-                error?.message || error
+                error?.message ||
+                error
               );
 
             }
@@ -562,7 +681,8 @@ async function startBot() {
 
           console.log(
             "❌ Group Welcome Error:",
-            error?.message || error
+            error?.message ||
+            error
           );
 
         }
@@ -592,8 +712,12 @@ async function startBot() {
 
             try {
 
-              if (!msg?.message) {
+              if (
+                !msg?.message
+              ) {
+
                 continue;
+
               }
 
 
@@ -604,9 +728,15 @@ async function startBot() {
               if (
                 msg.key?.fromMe
               ) {
+
                 continue;
+
               }
 
+
+              // ----------------------------------------
+              // Remote JID
+              // ----------------------------------------
 
               const remoteJid =
                 msg.key?.remoteJid;
@@ -618,9 +748,13 @@ async function startBot() {
 
               if (
                 !remoteJid ||
-                !remoteJid.endsWith("@g.us")
+                !remoteJid.endsWith(
+                  "@g.us"
+                )
               ) {
+
                 continue;
+
               }
 
 
@@ -634,6 +768,7 @@ async function startBot() {
               ) {
 
                 continue;
+
               }
 
 
@@ -648,7 +783,9 @@ async function startBot() {
 
 
               if (!messageText) {
+
                 continue;
+
               }
 
 
@@ -869,6 +1006,7 @@ async function startBot() {
                   );
 
                   continue;
+
                 }
 
 
@@ -877,21 +1015,29 @@ async function startBot() {
                     (p, index) => {
 
                       const name =
-                        p.notify ||
-                        p.name ||
-                        p.id?.split("@")[0] ||
-                        "Unknown";
+                        getDisplayName(p);
 
-                      return `${index + 1}️⃣ ${name}`;
+                      return `${index + 1}️⃣ @${name}`;
+
                     }
                   );
+
+
+                const mentions =
+                  adminParticipants
+                    .map(
+                      (p) => p.id
+                    )
+                    .filter(Boolean);
 
 
                 await sock.sendMessage(
                   remoteJid,
                   {
                     text:
-                      `👑 *GROUP ADMINS*\n\n${admins.join("\n")}`
+                      `👑 *GROUP ADMINS*\n\n${admins.join("\n")}\n\n❤️ *Piyas*`,
+
+                    mentions
                   }
                 );
 
@@ -913,7 +1059,8 @@ async function startBot() {
 
 
                 const participants =
-                  metadata.participants || [];
+                  metadata.participants ||
+                  [];
 
 
                 if (
@@ -929,26 +1076,38 @@ async function startBot() {
                   );
 
                   continue;
+
                 }
 
+
+                // ------------------------------------------
+                // Member List
+                // ------------------------------------------
 
                 const userList =
                   participants.map(
                     (p, index) => {
 
                       const name =
-                        p.notify ||
-                        p.name ||
-                        p.id?.split("@")[0] ||
-                        "Unknown";
+                        getDisplayName(p);
 
-                      return `${index + 1}️⃣ ${name}`;
+                      return {
+                        number:
+                          index + 1,
+
+                        name:
+                          `@${name}`,
+
+                        id:
+                          p.id
+                      };
+
                     }
                   );
 
 
                 // ------------------------------------------
-                // WhatsApp message খুব বড় হয়ে যাওয়া ঠেকানো
+                // Header
                 // ------------------------------------------
 
                 const header = `
@@ -968,38 +1127,69 @@ async function startBot() {
                   header;
 
 
+                let currentMentions =
+                  [];
+
+
+                // ------------------------------------------
+                // Message Chunking
+                // ------------------------------------------
+
                 for (
                   const user
                   of userList
                 ) {
 
+                  const line =
+                    `${user.number}️⃣ ${user.name}\n`;
+
+
                   if (
-                    (
-                      currentMessage.length +
-                      user.length +
-                      footer.length +
-                      2
-                    ) > 6000
+                    currentMessage.length +
+                    line.length +
+                    footer.length >
+                    6000
                   ) {
 
                     await sock.sendMessage(
                       remoteJid,
                       {
                         text:
-                          currentMessage
+                          currentMessage,
+
+                        mentions:
+                          currentMentions
                       }
                     );
 
 
-                    currentMessage = "";
+                    currentMessage =
+                      header;
+
+                    currentMentions =
+                      [];
+
                   }
 
 
                   currentMessage +=
-                    user + "\n";
+                    line;
+
+
+                  if (user.id) {
+
+                    currentMentions.push(
+                      user.id
+                    );
+
+                  }
 
                 }
 
+
+                // ------------------------------------------
+                // Footer
+                // ------------------------------------------
 
                 currentMessage +=
                   footer;
@@ -1013,7 +1203,10 @@ async function startBot() {
                     remoteJid,
                     {
                       text:
-                        currentMessage
+                        currentMessage,
+
+                      mentions:
+                        currentMentions
                     }
                   );
 
@@ -1028,10 +1221,12 @@ async function startBot() {
               console.log(
                 "❌ Individual Message Error:"
               );
+
               console.log(
                 messageError?.message ||
                 messageError
               );
+
               console.log("");
 
             }
@@ -1045,9 +1240,12 @@ async function startBot() {
           console.log(
             "❌ Message Handler Error:"
           );
+
           console.log(
-            error?.message || error
+            error?.message ||
+            error
           );
+
           console.log("");
 
         }
@@ -1068,9 +1266,12 @@ async function startBot() {
     console.log(
       "=========================================="
     );
+
     console.log(
-      error?.message || error
+      error?.message ||
+      error
     );
+
     console.log("");
 
 
