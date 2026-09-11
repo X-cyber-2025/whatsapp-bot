@@ -166,19 +166,59 @@ Admin-এর উপস্থিতি বা পরামর্শ ছাড়া 
 `;
 
 // ======================================================
+// PIYAS PERSONAL INFORMATION
+// ======================================================
+
+const PIYAS_INFO = `
+👤 *PIYAS — PERSONAL INFORMATION*
+
+📛 নাম:
+মোঃ আল আমিন
+
+📝 Name:
+MD. AL AMIN
+
+👨 পিতা:
+মোঃ মোশারফ হোসেন
+
+👩 মাতা:
+মোসাম্মৎ রীপা বেগম
+
+🎂 জন্মতারিখ:
+০৯ জানুয়ারি ২০০৬
+
+🩸 রক্তের গ্রুপ:
+A+ (A Positive)
+
+💍 বৈবাহিক অবস্থা:
+Unmarried (অবিবাহিত)
+
+🏠 ঠিকানা:
+গ্রাম/রাস্তা: বলদার চর, নান্দাইল
+ডাকঘর: হেংগু বাজার - ২২৯০
+নান্দাইল, ময়মনসিংহ
+
+🆔 NID:
+9172******24
+
+❤️ *Piyas*
+`;
+
+// ======================================================
 // MENU
 // ======================================================
 
 const MENU = `
 🤖 *GROUP BOT MENU*
 
-1️⃣ /menu — Bot Menu
+1️⃣ /menu অথবা /bot — Bot Menu
 2️⃣ /rules — গ্রুপের নিয়ম
 3️⃣ /website — Official Website
 4️⃣ /ping — Bot Status
 5️⃣ /id — Group ID
 6️⃣ /groupinfo — Group Information
 7️⃣ /members — Member Count
+8️⃣ /piyas — Piyas Information
 
 ❤️ *Piyas*
 `;
@@ -524,6 +564,7 @@ function isAllowedGroup(
   return GROUP_IDS.includes(
     groupId
   );
+
 }
 
 // ======================================================
@@ -821,10 +862,6 @@ async function startBot() {
         lastDisconnect
       }) => {
 
-        // ----------------------------------------------
-        // CONNECTING
-        // ----------------------------------------------
-
         if (
           connection ===
           "connecting"
@@ -835,10 +872,6 @@ async function startBot() {
           );
 
         }
-
-        // ----------------------------------------------
-        // OPEN
-        // ----------------------------------------------
 
         if (
           connection ===
@@ -889,10 +922,6 @@ async function startBot() {
           console.log("");
 
         }
-
-        // ----------------------------------------------
-        // CLOSE
-        // ----------------------------------------------
 
         if (
           connection ===
@@ -950,10 +979,6 @@ async function startBot() {
 
           }
 
-          // --------------------------------------------
-          // LOGGED OUT
-          // --------------------------------------------
-
           if (
             statusCode ===
             DisconnectReason.loggedOut
@@ -970,10 +995,6 @@ async function startBot() {
             return;
 
           }
-
-          // --------------------------------------------
-          // 403
-          // --------------------------------------------
 
           if (
             statusCode ===
@@ -999,10 +1020,6 @@ async function startBot() {
 
           }
 
-          // --------------------------------------------
-          // OTHER ERRORS
-          // --------------------------------------------
-
           console.log(
             "🔄 Reconnecting in 5 seconds..."
           );
@@ -1024,10 +1041,6 @@ async function startBot() {
 
         try {
 
-          // ----------------------------------------------
-          // ONLY ADD
-          // ----------------------------------------------
-
           if (
             update.action !==
             "add"
@@ -1036,10 +1049,6 @@ async function startBot() {
             return;
 
           }
-
-          // ----------------------------------------------
-          // GROUP ID
-          // ----------------------------------------------
 
           const groupId =
             typeof update.id ===
@@ -1050,10 +1059,6 @@ async function startBot() {
           if (!groupId) {
             return;
           }
-
-          // ----------------------------------------------
-          // ALLOWED GROUP
-          // ----------------------------------------------
 
           if (
             !isAllowedGroup(
@@ -1078,10 +1083,6 @@ async function startBot() {
             "=========================================="
           );
 
-          // ----------------------------------------------
-          // GROUP METADATA
-          // ----------------------------------------------
-
           const metadata =
             await sock.groupMetadata(
               groupId
@@ -1104,10 +1105,6 @@ async function startBot() {
             `👥 Group: ${groupName}`
           );
 
-          // ----------------------------------------------
-          // PROCESS NEW MEMBERS
-          // ----------------------------------------------
-
           for (
             const rawParticipant
             of update.participants || []
@@ -1117,10 +1114,6 @@ async function startBot() {
 
               let participantId =
                 null;
-
-              // ------------------------------------------
-              // PARTICIPANT ID
-              // ------------------------------------------
 
               if (
                 typeof rawParticipant ===
@@ -1158,19 +1151,11 @@ async function startBot() {
 
               }
 
-              // ------------------------------------------
-              // FIND PARTICIPANT
-              // ------------------------------------------
-
               const participant =
                 findParticipant(
                   participants,
                   participantId
                 );
-
-              // ------------------------------------------
-              // GET NAME
-              // ------------------------------------------
 
               let memberName =
                 participant
@@ -1195,18 +1180,10 @@ async function startBot() {
                   memberName
                 );
 
-              // ------------------------------------------
-              // GROUP NAME
-              // ------------------------------------------
-
               const safeGroupName =
                 String(
                   groupName
                 );
-
-              // ------------------------------------------
-              // WELCOME TEXT
-              // ------------------------------------------
 
               const welcomeMessage =
                 String(
@@ -1223,10 +1200,6 @@ async function startBot() {
 
               let sent =
                 false;
-
-              // ------------------------------------------
-              // SAFE MENTION
-              // ------------------------------------------
 
               const mentionJid =
                 getPhoneJid(
@@ -1278,10 +1251,6 @@ async function startBot() {
                 }
 
               }
-
-              // ------------------------------------------
-              // FALLBACK
-              // ------------------------------------------
 
               if (!sent) {
 
@@ -1409,10 +1378,6 @@ async function startBot() {
             of messages || []
           ) {
 
-            // ------------------------------------------
-            // VALIDATION
-            // ------------------------------------------
-
             if (
               !msg?.message
             ) {
@@ -1421,10 +1386,6 @@ async function startBot() {
 
             }
 
-            // ------------------------------------------
-            // IGNORE OWN MESSAGE
-            // ------------------------------------------
-
             if (
               msg.key?.fromMe
             ) {
@@ -1432,10 +1393,6 @@ async function startBot() {
               continue;
 
             }
-
-            // ------------------------------------------
-            // GROUP ONLY
-            // ------------------------------------------
 
             const remoteJid =
               msg.key?.remoteJid;
@@ -1452,10 +1409,6 @@ async function startBot() {
 
             }
 
-            // ------------------------------------------
-            // ALLOWED GROUP
-            // ------------------------------------------
-
             if (
               !isAllowedGroup(
                 remoteJid
@@ -1465,10 +1418,6 @@ async function startBot() {
               continue;
 
             }
-
-            // ------------------------------------------
-            // TEXT
-            // ------------------------------------------
 
             const text =
               getMessageText(
@@ -1487,12 +1436,12 @@ async function startBot() {
                 .toLowerCase();
 
             // ==========================================
-            // /MENU
+            // /MENU অথবা /BOT
             // ==========================================
 
             if (
-              command ===
-              "/menu"
+              command === "/menu" ||
+              command === "/bot"
             ) {
 
               await sock.sendMessage(
@@ -1757,6 +1706,27 @@ ${description}
                 );
 
               }
+
+              continue;
+
+            }
+
+            // ==========================================
+            // /PIYAS
+            // ==========================================
+
+            if (
+              command ===
+              "/piyas"
+            ) {
+
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text:
+                    PIYAS_INFO
+                }
+              );
 
               continue;
 
