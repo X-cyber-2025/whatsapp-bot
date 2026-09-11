@@ -447,6 +447,27 @@ function cacheParticipants(
 }
 
 /* =========================================================
+   ADMIN HELPERS
+========================================================= */
+
+function isAdminParticipant(participant = {}) {
+  return (
+    participant?.admin === "admin" ||
+    participant?.admin === "superadmin" ||
+    participant?.admin === true ||
+    participant?.isAdmin === true ||
+    participant?.isSuperAdmin === true
+  );
+}
+
+function isOwnerParticipant(participant = {}) {
+  return (
+    participant?.admin === "superadmin" ||
+    participant?.isSuperAdmin === true
+  );
+}
+
+/* =========================================================
    GROUP CHECK
 ========================================================= */
 
@@ -510,7 +531,7 @@ function findParticipant(
 }
 
 /* =========================================================
-   MENU
+   MAIN MENU
 ========================================================= */
 
 const MENU_TEXT = `
@@ -537,9 +558,15 @@ const MENU_TEXT = `
 │
 ╰────────────────────
 
+╭─❖ 💰 *BUY / SELL*
+│
+│ 🔟 /deal /ডিল
+│
+╰────────────────────
+
 ╭─❖ 🤍 *PIYAS*
 │
-│ 🔟 /piyas
+│ 1️⃣1️⃣ /piyas
 │
 ╰────────────────────
 
@@ -678,6 +705,262 @@ const PIYAS_INFO = `
 `;
 
 /* =========================================================
+   DEAL NOTICE
+========================================================= */
+
+const DEAL_NOTICE_TOP = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🤝 *DEAL NOTICE*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+⚠️ *গুরুত্বপূর্ণ সতর্কতা!*
+
+কোনো ধরনের Account Buy/Sell,
+Google Play Points অথবা অন্য
+কোনো Deal করার আগে অবশ্যই
+Group-এর Admin-এর সাথে
+যোগাযোগ করুন।
+
+🚫 *Admin ছাড়া কারো সাথে
+কোনো Deal করবেন না।*
+
+⚠️ Admin-এর অনুমতি ছাড়া
+কোনো Deal করলে তার সম্পূর্ণ
+দায়ভার সংশ্লিষ্ট ব্যক্তির।
+
+❌ Admin ছাড়া করা কোনো Deal-এর
+জন্য Group Admin কোনোভাবেই
+দায়ী থাকবে না।
+
+👑 *Deal করার জন্য Group Admin:*
+
+`;
+
+const DEAL_NOTICE_BOTTOM = `
+📌 নিরাপদ থাকতে সবসময়
+Admin-এর মাধ্যমে Deal করুন।
+
+🤍 *PIYAS*
+`;
+
+/* =========================================================
+   SEND DEAL NOTICE
+========================================================= */
+
+async function sendDealNotice(remoteJid) {
+  try {
+    if (!sock) {
+      return;
+    }
+
+    const metadata =
+      await sock.groupMetadata(
+        remoteJid
+      );
+
+    const participants =
+      metadata?.participants || [];
+
+    cacheParticipants(
+      participants
+    );
+
+    const adminParticipants =
+      participants.filter(
+        isAdminParticipant
+      );
+
+    if (
+      adminParticipants.length === 0
+    ) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            DEAL_NOTICE_TOP +
+            "⚠️ বর্তমানে কোনো Admin পাওয়া যায়নি।\n\n" +
+            DEAL_NOTICE_BOTTOM
+        }
+      );
+
+      return;
+    }
+
+    const owners =
+      adminParticipants.filter(
+        isOwnerParticipant
+      );
+
+    const normalAdmins =
+      adminParticipants.filter(
+        p => !isOwnerParticipant(p)
+      );
+
+    const lines = [];
+    const mentions = [];
+    const usedJids = new Set();
+
+    let number = 1;
+
+    /* =====================================================
+       GROUP OWNER
+    ===================================================== */
+
+    for (
+      const participant of owners
+    ) {
+      const name =
+        getDisplayName(
+          participant
+        );
+
+      let jid =
+        getDirectPhoneJid(
+          participant
+        );
+
+      if (
+        !jid &&
+        isPhoneJid(
+          metadata?.ownerPn
+        )
+      ) {
+        jid =
+          metadata.ownerPn;
+      }
+
+      if (
+        !jid &&
+        isPhoneJid(
+          metadata?.subjectOwnerPn
+        )
+      ) {
+        jid =
+          metadata.subjectOwnerPn;
+      }
+
+      if (
+        jid &&
+        !usedJids.has(jid)
+      ) {
+        usedJids.add(jid);
+
+        mentions.push(
+          jid
+        );
+
+        lines.push(
+          `${number}️⃣ @${name} ⭐ *Group Owner*`
+        );
+      } else {
+        lines.push(
+          `${number}️⃣ ${name} ⭐ *Group Owner*`
+        );
+      }
+
+      number++;
+    }
+
+    /* =====================================================
+       OTHER ADMINS
+    ===================================================== */
+
+    for (
+      const participant of normalAdmins
+    ) {
+      const name =
+        getDisplayName(
+          participant
+        );
+
+      const jid =
+        getPhoneJid(
+          participant
+        );
+
+      if (
+        jid &&
+        !usedJids.has(jid)
+      ) {
+        usedJids.add(jid);
+
+        mentions.push(
+          jid
+        );
+
+        lines.push(
+          `${number}️⃣ @${name} 👑 *Admin*`
+        );
+      } else {
+        lines.push(
+          `${number}️⃣ ${name} 👑 *Admin*`
+        );
+      }
+
+      number++;
+    }
+
+    const dealText =
+      DEAL_NOTICE_TOP +
+      lines.join("\n") +
+      "\n\n" +
+      `👥 *মোট Admin:* ${adminParticipants.length} জন\n\n` +
+      DEAL_NOTICE_BOTTOM;
+
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text: dealText,
+        mentions: [
+          ...new Set(
+            mentions
+          )
+        ]
+      }
+    );
+
+  } catch (error) {
+    console.log(
+      "❌ Deal notice error:",
+      error?.message
+    );
+
+    try {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🤝 *DEAL NOTICE*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+⚠️ *গুরুত্বপূর্ণ সতর্কতা!*
+
+কোনো ধরনের Account Buy/Sell,
+Google Play Points অথবা অন্য
+কোনো Deal করার আগে অবশ্যই
+Group-এর Admin-এর সাথে
+যোগাযোগ করুন।
+
+🚫 *Admin ছাড়া কারো সাথে
+কোনো Deal করবেন না।*
+
+❌ Admin ছাড়া করা কোনো Deal-এর
+জন্য Group Admin কোনোভাবেই
+দায়ী থাকবে না।
+
+📌 নিরাপদ থাকতে সবসময়
+Admin-এর মাধ্যমে Deal করুন।
+
+🤍 *PIYAS*
+`
+        }
+      );
+    } catch {}
+  }
+}
+
+/* =========================================================
    SEND WELCOME
 ========================================================= */
 
@@ -691,12 +974,6 @@ async function sendWelcome(
     }
 
     let metadata = null;
-
-    /*
-     * প্রথমে event-এর participant ব্যবহার করা হবে।
-     * এরপর groupMetadata থেকে আরও সম্পূর্ণ তথ্য
-     * নেওয়ার চেষ্টা করা হবে।
-     */
 
     try {
       metadata =
@@ -733,11 +1010,6 @@ async function sendWelcome(
     const phoneJid =
       getPhoneJid(member);
 
-    /*
-     * আসল Phone JID পাওয়া গেলে
-     * WhatsApp clickable mention করবে।
-     */
-
     if (
       phoneJid &&
       isPhoneJid(phoneJid)
@@ -759,11 +1031,6 @@ async function sendWelcome(
 
       return;
     }
-
-    /*
-     * JID পাওয়া না গেলেও Welcome বন্ধ হবে না।
-     * শুধু @ ছাড়া নাম দেখাবে।
-     */
 
     const fallbackText =
       getWelcomeText(name)
@@ -857,9 +1124,7 @@ async function startBot() {
     );
 
     /* =====================================================
-       NEW MEMBER / PARTICIPANT UPDATE
-       
-       নতুন কেউ Add/Join করলে Welcome যাবে।
+       NEW MEMBER
     ===================================================== */
 
     sock.ev.on(
@@ -891,10 +1156,6 @@ async function startBot() {
             return;
           }
 
-          /*
-           * নতুন Member Add হলে
-           */
-
           if (
             action === "add"
           ) {
@@ -907,10 +1168,6 @@ async function startBot() {
               );
             }
           }
-
-          /*
-           * Promote/Demote হলে শুধু cache update
-           */
 
           if (
             action === "promote" ||
@@ -964,10 +1221,6 @@ async function startBot() {
           pairingRequested =
             false;
 
-          /*
-           * Load groups and cache participants
-           */
-
           try {
             const groups =
               await sock.groupFetchAllParticipating();
@@ -986,16 +1239,13 @@ async function startBot() {
             console.log(
               "📦 Group participant cache loaded."
             );
+
           } catch (error) {
             console.log(
               "⚠️ Group cache error:",
               error?.message
             );
           }
-
-          /*
-           * Pairing Code
-           */
 
           if (
             PHONE_NUMBER &&
@@ -1105,10 +1355,6 @@ async function startBot() {
             return;
           }
 
-          /*
-           * শুধু Group Message
-           */
-
           if (
             !remoteJid.endsWith(
               "@g.us"
@@ -1195,6 +1441,23 @@ async function startBot() {
           }
 
           /* =================================================
+             /DEAL এবং /ডিল
+             
+             Admin ID mention সহ Deal Notice
+          ================================================= */
+
+          if (
+            command === "/deal" ||
+            command === "/ডিল"
+          ) {
+            await sendDealNotice(
+              remoteJid
+            );
+
+            return;
+          }
+
+          /* =================================================
              /PING
           ================================================= */
 
@@ -1271,12 +1534,7 @@ async function startBot() {
 
             const admins =
               participants.filter(
-                p =>
-                  p?.admin === "admin" ||
-                  p?.admin === "superadmin" ||
-                  p?.admin === true ||
-                  p?.isAdmin === true ||
-                  p?.isSuperAdmin === true
+                isAdminParticipant
               );
 
             await sock.sendMessage(
@@ -1325,8 +1583,8 @@ async function startBot() {
           /* =================================================
              /MEMBERS
              
-             এখানে কোনো নাম/নাম্বার দেখাবে না।
              শুধু মোট Member সংখ্যা দেখাবে।
+             কোনো নাম/নাম্বার দেখাবে না।
           ================================================= */
 
           if (
@@ -1366,7 +1624,7 @@ async function startBot() {
           /* =================================================
              /ADMIN
              
-             শুধু /admin
+             শুধু /admin কাজ করবে।
              /admins কাজ করবে না।
           ================================================= */
 
@@ -1388,12 +1646,7 @@ async function startBot() {
 
             const adminParticipants =
               participants.filter(
-                p =>
-                  p?.admin === "admin" ||
-                  p?.admin === "superadmin" ||
-                  p?.admin === true ||
-                  p?.isAdmin === true ||
-                  p?.isSuperAdmin === true
+                isAdminParticipant
               );
 
             if (
@@ -1413,22 +1666,13 @@ async function startBot() {
 
             const owners =
               adminParticipants.filter(
-                p =>
-                  p?.admin ===
-                    "superadmin" ||
-                  p?.isSuperAdmin ===
-                    true
+                isOwnerParticipant
               );
 
             const normalAdmins =
               adminParticipants.filter(
                 p =>
-                  !(
-                    p?.admin ===
-                      "superadmin" ||
-                    p?.isSuperAdmin ===
-                      true
-                  )
+                  !isOwnerParticipant(p)
               );
 
             const lines = [];
@@ -1454,11 +1698,6 @@ async function startBot() {
                 getDirectPhoneJid(
                   participant
                 );
-
-              /*
-               * Owner-এর PN metadata থেকে
-               * পাওয়া গেলে সেটাও ব্যবহার করা হবে।
-               */
 
               if (
                 !jid &&
