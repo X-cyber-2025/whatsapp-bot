@@ -23,8 +23,11 @@ const AUTH_FOLDER = "./auth_info";
 const PHONE_NUMBER =
   process.env.PHONE_NUMBER || "";
 
-const GROUP_ID =
-  process.env.GROUP_ID || "";
+// Multiple Group IDs supported
+const GROUP_IDS = (process.env.GROUP_ID || "")
+  .split(",")
+  .map(id => id.trim())
+  .filter(Boolean);
 
 const WEBSITE_URL =
   "https://x-cyber-2025.github.io/X-cyber.web/";
@@ -260,35 +263,6 @@ function saveContacts(
 }
 
 // ======================================================
-// SAVE PUSH NAME
-// ======================================================
-
-function savePushName(
-  id,
-  pushName
-) {
-
-  if (
-    typeof id !== "string" ||
-    !id
-  ) {
-    return;
-  }
-
-  if (
-    typeof pushName === "string" &&
-    pushName.trim()
-  ) {
-
-    contactNames.set(
-      id,
-      pushName.trim()
-    );
-
-  }
-}
-
-// ======================================================
 // GET DISPLAY NAME
 // ======================================================
 
@@ -302,10 +276,6 @@ function getDisplayName(
   ) {
     return "Unknown Member";
   }
-
-  // ------------------------------------------
-  // CACHE
-  // ------------------------------------------
 
   const possibleIds = [
     participant.id,
@@ -334,10 +304,6 @@ function getDisplayName(
     }
   }
 
-  // ------------------------------------------
-  // DIRECT NAME
-  // ------------------------------------------
-
   const possibleNames = [
     participant.username,
     participant.notify,
@@ -357,10 +323,6 @@ function getDisplayName(
 
     }
   }
-
-  // ------------------------------------------
-  // PHONE JID
-  // ------------------------------------------
 
   const id =
     typeof participant.id === "string"
@@ -499,10 +461,6 @@ function getPhoneJid(
 
   }
 
-  // ------------------------------------------
-  // phoneNumber already JID
-  // ------------------------------------------
-
   if (
     typeof participant.phoneNumber ===
       "string" &&
@@ -512,10 +470,6 @@ function getPhoneJid(
     return participant.phoneNumber;
 
   }
-
-  // ------------------------------------------
-  // numeric phoneNumber
-  // ------------------------------------------
 
   if (
     typeof participant.phoneNumber ===
@@ -537,10 +491,6 @@ function getPhoneJid(
     }
   }
 
-  // ------------------------------------------
-  // participant ID
-  // ------------------------------------------
-
   if (
     typeof participant.id === "string" &&
     participant.id.endsWith(
@@ -553,6 +503,27 @@ function getPhoneJid(
   }
 
   return null;
+}
+
+// ======================================================
+// GROUP CHECK
+// ======================================================
+
+function isAllowedGroup(
+  groupId
+) {
+
+  if (
+    GROUP_IDS.length === 0
+  ) {
+
+    return true;
+
+  }
+
+  return GROUP_IDS.includes(
+    groupId
+  );
 }
 
 // ======================================================
@@ -618,7 +589,7 @@ async function startBot() {
     );
 
     // ==================================================
-    // AUTH STATE
+    // AUTH
     // ==================================================
 
     const {
@@ -630,7 +601,7 @@ async function startBot() {
       );
 
     // ==================================================
-    // CREATE SOCKET
+    // SOCKET
     // ==================================================
 
     const sock =
@@ -642,7 +613,8 @@ async function startBot() {
           level: "info"
         }),
 
-        printQRInTerminal: false,
+        printQRInTerminal:
+          false,
 
         browser:
           Browsers.ubuntu(
@@ -661,7 +633,6 @@ async function startBot() {
         markOnlineOnConnect:
           true,
 
-        // Prevent unnecessary history sync
         syncFullHistory:
           false,
 
@@ -735,6 +706,7 @@ async function startBot() {
                 );
 
                 return;
+
               }
 
               console.log("");
@@ -771,15 +743,19 @@ async function startBot() {
                 "=========================================="
               );
               console.log("");
+
               console.log(
                 "📱 WhatsApp → Settings → Linked Devices"
               );
+
               console.log(
                 "➡️ Link a Device"
               );
+
               console.log(
                 "➡️ Link with phone number instead"
               );
+
               console.log("");
 
             } catch (error) {
@@ -829,7 +805,7 @@ async function startBot() {
       );
 
       console.log(
-        "⚠️ Add PHONE_NUMBER in Environment Variables."
+        "⚠️ Add PHONE_NUMBER in .env"
       );
 
     }
@@ -895,9 +871,10 @@ async function startBot() {
           );
 
           console.log(
-            `🎯 Bot Group Restriction: ${
-              GROUP_ID ||
-              "ALL GROUPS"
+            `🎯 Allowed Groups: ${
+              GROUP_IDS.length > 0
+                ? GROUP_IDS.join(", ")
+                : "ALL GROUPS"
             }`
           );
 
@@ -908,6 +885,7 @@ async function startBot() {
           console.log(
             "=========================================="
           );
+
           console.log("");
 
         }
@@ -990,6 +968,7 @@ async function startBot() {
             );
 
             return;
+
           }
 
           // --------------------------------------------
@@ -1007,11 +986,7 @@ async function startBot() {
             );
 
             console.log(
-              "⚠️ Do NOT keep restarting repeatedly."
-            );
-
-            console.log(
-              "⚠️ Stop the bot and check the WhatsApp account."
+              "⚠️ Stop the bot and check the account/session."
             );
 
             console.log(
@@ -1021,6 +996,7 @@ async function startBot() {
             console.log("");
 
             return;
+
           }
 
           // --------------------------------------------
@@ -1076,13 +1052,13 @@ async function startBot() {
           }
 
           // ----------------------------------------------
-          // GROUP RESTRICTION
+          // ALLOWED GROUP
           // ----------------------------------------------
 
           if (
-            GROUP_ID &&
-            groupId !==
-              GROUP_ID
+            !isAllowedGroup(
+              groupId
+            )
           ) {
 
             return;
@@ -1093,15 +1069,17 @@ async function startBot() {
           console.log(
             "=========================================="
           );
+
           console.log(
             "🎉 NEW MEMBER EVENT"
           );
+
           console.log(
             "=========================================="
           );
 
           // ----------------------------------------------
-          // GET METADATA
+          // GROUP METADATA
           // ----------------------------------------------
 
           const metadata =
@@ -1126,18 +1104,8 @@ async function startBot() {
             `👥 Group: ${groupName}`
           );
 
-          console.log(
-            `👤 New Members: ${
-              Array.isArray(
-                update.participants
-              )
-                ? update.participants.length
-                : 0
-            }`
-          );
-
           // ----------------------------------------------
-          // PROCESS MEMBERS
+          // PROCESS NEW MEMBERS
           // ----------------------------------------------
 
           for (
@@ -1147,12 +1115,12 @@ async function startBot() {
 
             try {
 
+              let participantId =
+                null;
+
               // ------------------------------------------
               // PARTICIPANT ID
               // ------------------------------------------
-
-              let participantId =
-                null;
 
               if (
                 typeof rawParticipant ===
@@ -1183,24 +1151,11 @@ async function startBot() {
               }
 
               if (
-                typeof participantId !==
-                  "string" ||
                 !participantId
               ) {
 
-                console.log(
-                  "⚠️ Invalid participant:"
-                );
-
-                console.log(
-                  JSON.stringify(
-                    rawParticipant,
-                    null,
-                    2
-                  )
-                );
-
                 continue;
+
               }
 
               // ------------------------------------------
@@ -1214,7 +1169,7 @@ async function startBot() {
                 );
 
               // ------------------------------------------
-              // NAME
+              // GET NAME
               // ------------------------------------------
 
               let memberName =
@@ -1222,31 +1177,7 @@ async function startBot() {
                   ? getDisplayName(
                       participant
                     )
-                  : "Unknown Member";
-
-              if (
-                !memberName ||
-                memberName ===
-                  "Unknown Member"
-              ) {
-
-                const cached =
-                  contactNames.get(
-                    participantId
-                  );
-
-                if (
-                  typeof cached ===
-                    "string" &&
-                  cached.trim()
-                ) {
-
-                  memberName =
-                    cached.trim();
-
-                }
-
-              }
+                  : "New Member";
 
               if (
                 !memberName ||
@@ -1265,39 +1196,6 @@ async function startBot() {
                 );
 
               // ------------------------------------------
-              // CACHE NAME
-              // ------------------------------------------
-
-              if (participant) {
-
-                const ids = [
-                  participant.id,
-                  participant.lid,
-                  participant.phoneNumber
-                ];
-
-                for (
-                  const id of ids
-                ) {
-
-                  if (
-                    typeof id ===
-                      "string" &&
-                    id.trim()
-                  ) {
-
-                    contactNames.set(
-                      id,
-                      memberName
-                    );
-
-                  }
-
-                }
-
-              }
-
-              // ------------------------------------------
               // GROUP NAME
               // ------------------------------------------
 
@@ -1307,18 +1205,15 @@ async function startBot() {
                 );
 
               // ------------------------------------------
-              // WELCOME WITH DISPLAY NAME
+              // WELCOME TEXT
               // ------------------------------------------
-
-              const displayMember =
-                `@${memberName}`;
 
               const welcomeMessage =
                 String(
                   WELCOME
                     .replace(
                       "{member}",
-                      displayMember
+                      `@${memberName}`
                     )
                     .replace(
                       "{group}",
@@ -1326,12 +1221,12 @@ async function startBot() {
                     )
                 );
 
-              // ------------------------------------------
-              // TRY REAL PHONE MENTION
-              // ------------------------------------------
-
               let sent =
                 false;
+
+              // ------------------------------------------
+              // SAFE MENTION
+              // ------------------------------------------
 
               const mentionJid =
                 getPhoneJid(
@@ -1348,11 +1243,6 @@ async function startBot() {
 
                 try {
 
-                  console.log(
-                    "📢 Trying real mention:",
-                    mentionJid
-                  );
-
                   await sock.sendMessage(
                     groupId,
                     {
@@ -1366,7 +1256,7 @@ async function startBot() {
                   );
 
                   console.log(
-                    "✅ Welcome sent with real mention."
+                    "✅ Welcome sent with mention."
                   );
 
                   sent =
@@ -1377,16 +1267,12 @@ async function startBot() {
                 ) {
 
                   console.log(
-                    "⚠️ Real mention failed:"
+                    "⚠️ Mention failed:"
                   );
 
                   console.log(
                     mentionError?.message ||
                     mentionError
-                  );
-
-                  console.log(
-                    "📨 Sending fallback..."
                   );
 
                 }
@@ -1421,23 +1307,12 @@ async function startBot() {
                 );
 
                 console.log(
-                  "✅ Welcome sent without mention."
+                  "✅ Welcome sent."
                 );
-
-                sent =
-                  true;
 
               }
 
-              // ------------------------------------------
-              // LOG
-              // ------------------------------------------
-
               console.log("");
-              console.log(
-                "------------------------------------------"
-              );
-
               console.log(
                 "🎉 NEW MEMBER JOINED"
               );
@@ -1447,24 +1322,14 @@ async function startBot() {
               );
 
               console.log(
-                `🆔 Event ID: ${participantId}`
+                `🆔 ID: ${participantId}`
               );
 
               console.log(
                 `👥 Group: ${safeGroupName}`
               );
 
-              console.log(
-                `📨 Status: ${
-                  sent
-                    ? "WELCOME SENT"
-                    : "FAILED"
-                }`
-              );
-
-              console.log(
-                "------------------------------------------"
-              );
+              console.log("");
 
             } catch (
               memberError
@@ -1485,10 +1350,6 @@ async function startBot() {
               ) {
 
                 console.log(
-                  "📌 Error Stack:"
-                );
-
-                console.log(
                   memberError.stack
                 );
 
@@ -1499,12 +1360,6 @@ async function startBot() {
             }
 
           }
-
-          console.log(
-            "=========================================="
-          );
-
-          console.log("");
 
         } catch (
           error
@@ -1523,10 +1378,6 @@ async function startBot() {
           if (
             error?.stack
           ) {
-
-            console.log(
-              "📌 Error Stack:"
-            );
 
             console.log(
               error.stack
@@ -1559,7 +1410,7 @@ async function startBot() {
           ) {
 
             // ------------------------------------------
-            // BASIC VALIDATION
+            // VALIDATION
             // ------------------------------------------
 
             if (
@@ -1583,7 +1434,7 @@ async function startBot() {
             }
 
             // ------------------------------------------
-            // REMOTE JID
+            // GROUP ONLY
             // ------------------------------------------
 
             const remoteJid =
@@ -1602,13 +1453,13 @@ async function startBot() {
             }
 
             // ------------------------------------------
-            // GROUP RESTRICTION
+            // ALLOWED GROUP
             // ------------------------------------------
 
             if (
-              GROUP_ID &&
-              remoteJid !==
-                GROUP_ID
+              !isAllowedGroup(
+                remoteJid
+              )
             ) {
 
               continue;
@@ -1616,7 +1467,7 @@ async function startBot() {
             }
 
             // ------------------------------------------
-            // MESSAGE TEXT
+            // TEXT
             // ------------------------------------------
 
             const text =
@@ -1629,10 +1480,6 @@ async function startBot() {
               continue;
 
             }
-
-            // ------------------------------------------
-            // COMMAND
-            // ------------------------------------------
 
             const command =
               text
@@ -1916,188 +1763,10 @@ ${description}
             }
 
             // ==========================================
-            // /USERS
+            // UNKNOWN COMMAND
             // ==========================================
 
-            if (
-              command ===
-              "/users"
-            ) {
-
-              try {
-
-                const metadata =
-                  await sock.groupMetadata(
-                    remoteJid
-                  );
-
-                const participants =
-                  Array.isArray(
-                    metadata?.participants
-                  )
-                    ? metadata.participants
-                    : [];
-
-                if (
-                  participants.length ===
-                  0
-                ) {
-
-                  await sock.sendMessage(
-                    remoteJid,
-                    {
-                      text:
-                        "❌ কোনো সদস্য পাওয়া যায়নি।"
-                    }
-                  );
-
-                  continue;
-
-                }
-
-                let userList =
-                  "👥 *GROUP MEMBERS*\n\n";
-
-                const mentions = [];
-
-                let number =
-                  1;
-
-                for (
-                  const participant
-                  of participants
-                ) {
-
-                  const id =
-                    typeof participant?.id ===
-                    "string"
-                      ? participant.id
-                      : null;
-
-                  if (!id) {
-                    continue;
-                  }
-
-                  let name =
-                    getDisplayName(
-                      participant
-                    );
-
-                  if (
-                    !name ||
-                    name ===
-                      "Unknown Member"
-                  ) {
-
-                    name =
-                      "Member";
-
-                  }
-
-                  name =
-                    String(name);
-
-                  userList +=
-                    `${number}️⃣ @${name}\n`;
-
-                  if (
-                    id.endsWith(
-                      "@s.whatsapp.net"
-                    )
-                  ) {
-
-                    mentions.push(
-                      id
-                    );
-
-                  }
-
-                  number++;
-
-                }
-
-                userList +=
-                  `\n👥 Total: ${participants.length}`;
-
-                // ----------------------------------------
-                // SEND WITH MENTION
-                // ----------------------------------------
-
-                if (
-                  mentions.length >
-                  0
-                ) {
-
-                  try {
-
-                    await sock.sendMessage(
-                      remoteJid,
-                      {
-                        text:
-                          userList,
-
-                        mentions
-                      }
-                    );
-
-                  } catch (
-                    mentionError
-                  ) {
-
-                    console.log(
-                      "⚠️ /users mention failed:"
-                    );
-
-                    console.log(
-                      mentionError?.message ||
-                      mentionError
-                    );
-
-                    await sock.sendMessage(
-                      remoteJid,
-                      {
-                        text:
-                          userList
-                      }
-                    );
-
-                  }
-
-                } else {
-
-                  await sock.sendMessage(
-                    remoteJid,
-                    {
-                      text:
-                        userList
-                    }
-                  );
-
-                }
-
-              } catch (
-                error
-              ) {
-
-                console.log(
-                  "❌ Users Error:",
-                  error?.message ||
-                  error
-                );
-
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      "❌ Member list পাওয়া যায়নি।"
-                  }
-                );
-
-              }
-
-              continue;
-
-            }
+            // কোনো অচেনা command হলে Bot কোনো reply করবে না.
 
           }
 
@@ -2133,7 +1802,7 @@ ${description}
     );
 
     // ==================================================
-    // BOT READY
+    // BOT STARTED
     // ==================================================
 
     console.log(
@@ -2160,10 +1829,6 @@ ${description}
     if (
       error?.stack
     ) {
-
-      console.log(
-        "📌 Error Stack:"
-      );
 
       console.log(
         error.stack
