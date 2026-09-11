@@ -28,12 +28,12 @@ const PHONE_NUMBER = (process.env.PHONE_NUMBER || "")
    GLOBAL DATA
 ========================================================= */
 
+let sock = null;
+let pairingRequested = false;
+
 const contactNames = new Map();
 const contactPhoneJids = new Map();
 const lidToPhoneJid = new Map();
-
-let sock = null;
-let pairingRequested = false;
 
 /* =========================================================
    HTTP SERVER
@@ -77,7 +77,7 @@ const logger = P({
 });
 
 /* =========================================================
-   HELPERS
+   BASIC HELPERS
 ========================================================= */
 
 function cleanName(name) {
@@ -93,7 +93,9 @@ function cleanName(name) {
 }
 
 function normalizeJid(jid) {
-  if (!jid || typeof jid !== "string") return null;
+  if (!jid || typeof jid !== "string") {
+    return null;
+  }
 
   return jid.trim();
 }
@@ -115,9 +117,12 @@ function isLidJid(jid) {
 function phoneNumberToJid(phone) {
   if (!phone) return null;
 
-  const clean = String(phone).replace(/[^0-9]/g, "");
+  const clean = String(phone)
+    .replace(/[^0-9]/g, "");
 
-  if (clean.length < 8) return null;
+  if (clean.length < 8) {
+    return null;
+  }
 
   return `${clean}@s.whatsapp.net`;
 }
@@ -133,13 +138,24 @@ function saveContacts(contacts = []) {
     const id = normalizeJid(contact.id);
     const lid = normalizeJid(contact.lid);
 
-    const possiblePhone =
-      contact.phoneNumber ||
-      (isPhoneJid(id) ? id : null);
+    let phoneJid = null;
 
-    const phoneJid = isPhoneJid(possiblePhone)
-      ? possiblePhone
-      : phoneNumberToJid(possiblePhone);
+    if (
+      typeof contact.phoneNumber === "string" &&
+      contact.phoneNumber
+    ) {
+      if (isPhoneJid(contact.phoneNumber)) {
+        phoneJid = contact.phoneNumber;
+      } else {
+        phoneJid = phoneNumberToJid(
+          contact.phoneNumber
+        );
+      }
+    }
+
+    if (!phoneJid && isPhoneJid(id)) {
+      phoneJid = id;
+    }
 
     const name = cleanName(
       contact.username ||
@@ -151,23 +167,59 @@ function saveContacts(contacts = []) {
     );
 
     if (name) {
-      if (id) contactNames.set(id, name);
-      if (lid) contactNames.set(lid, name);
-      if (phoneJid) contactNames.set(phoneJid, name);
+      if (id) {
+        contactNames.set(id, name);
+      }
+
+      if (lid) {
+        contactNames.set(lid, name);
+      }
+
+      if (phoneJid) {
+        contactNames.set(phoneJid, name);
+      }
     }
 
     if (phoneJid) {
-      if (id) contactPhoneJids.set(id, phoneJid);
-      if (lid) contactPhoneJids.set(lid, phoneJid);
-      contactPhoneJids.set(phoneJid, phoneJid);
+      if (id) {
+        contactPhoneJids.set(
+          id,
+          phoneJid
+        );
+      }
+
+      if (lid) {
+        contactPhoneJids.set(
+          lid,
+          phoneJid
+        );
+      }
+
+      contactPhoneJids.set(
+        phoneJid,
+        phoneJid
+      );
     }
 
-    if (id && isLidJid(id) && phoneJid) {
-      lidToPhoneJid.set(id, phoneJid);
+    if (
+      id &&
+      isLidJid(id) &&
+      phoneJid
+    ) {
+      lidToPhoneJid.set(
+        id,
+        phoneJid
+      );
     }
 
-    if (lid && phoneJid) {
-      lidToPhoneJid.set(lid, phoneJid);
+    if (
+      lid &&
+      phoneJid
+    ) {
+      lidToPhoneJid.set(
+        lid,
+        phoneJid
+      );
     }
   }
 }
@@ -184,14 +236,15 @@ function getDisplayName(participant = {}) {
   ].filter(Boolean);
 
   for (const id of ids) {
-    const cached = contactNames.get(id);
+    const cachedName =
+      contactNames.get(id);
 
-    if (cached) {
-      return cached;
+    if (cachedName) {
+      return cachedName;
     }
   }
 
-  const name = cleanName(
+  const directName = cleanName(
     participant.username ||
     participant.notify ||
     participant.name ||
@@ -200,29 +253,39 @@ function getDisplayName(participant = {}) {
     null
   );
 
-  if (name) {
-    return name;
+  if (directName) {
+    return directName;
   }
 
   if (
     typeof participant.phoneNumber === "string" &&
     participant.phoneNumber
   ) {
-    const phone = participant.phoneNumber
-      .replace(/@s.whatsapp.net/g, "")
-      .replace(/[^0-9]/g, "");
+    const phone =
+      participant.phoneNumber
+        .replace(
+          /@s.whatsapp.net/g,
+          ""
+        )
+        .replace(
+          /[^0-9]/g,
+          ""
+        );
 
-    if (phone) return phone;
+    if (phone) {
+      return phone;
+    }
   }
 
-  if (typeof participant.id === "string") {
-    if (participant.id.includes("@")) {
-      return participant.id
-        .split("@")[0]
-        .replace(/[^0-9]/g, "") || "Member";
-    }
+  if (
+    typeof participant.id === "string"
+  ) {
+    const idPart =
+      participant.id.split("@")[0];
 
-    return participant.id;
+    if (idPart) {
+      return idPart;
+    }
   }
 
   return "Member";
@@ -233,23 +296,32 @@ function getDisplayName(participant = {}) {
 ========================================================= */
 
 function getPhoneJid(participant = {}) {
-  const directPhone =
-    participant.phoneNumber ||
-    null;
+  if (
+    typeof participant.phoneNumber === "string" &&
+    participant.phoneNumber
+  ) {
+    if (
+      isPhoneJid(
+        participant.phoneNumber
+      )
+    ) {
+      return participant.phoneNumber;
+    }
 
-  if (isPhoneJid(directPhone)) {
-    return directPhone;
+    const directJid =
+      phoneNumberToJid(
+        participant.phoneNumber
+      );
+
+    if (directJid) {
+      return directJid;
+    }
   }
 
   if (
-    typeof directPhone === "string" &&
-    !directPhone.includes("@")
+    isPhoneJid(participant.id)
   ) {
-    const jid = phoneNumberToJid(directPhone);
-
-    if (jid) {
-      return jid;
-    }
+    return participant.id;
   }
 
   const ids = [
@@ -258,20 +330,24 @@ function getPhoneJid(participant = {}) {
   ].filter(Boolean);
 
   for (const id of ids) {
-    if (isPhoneJid(id)) {
-      return id;
+    const cachedPhone =
+      contactPhoneJids.get(id);
+
+    if (
+      cachedPhone &&
+      isPhoneJid(cachedPhone)
+    ) {
+      return cachedPhone;
     }
 
-    const cached = contactPhoneJids.get(id);
+    const mappedPhone =
+      lidToPhoneJid.get(id);
 
-    if (cached && isPhoneJid(cached)) {
-      return cached;
-    }
-
-    const mapped = lidToPhoneJid.get(id);
-
-    if (mapped && isPhoneJid(mapped)) {
-      return mapped;
+    if (
+      mappedPhone &&
+      isPhoneJid(mappedPhone)
+    ) {
+      return mappedPhone;
     }
   }
 
@@ -283,21 +359,29 @@ function getPhoneJid(participant = {}) {
 ========================================================= */
 
 function getAdminInfo(participant = {}) {
-  const name = getDisplayName(participant);
-  const phoneJid = getPhoneJid(participant);
+  const name =
+    getDisplayName(participant);
+
+  const phoneJid =
+    getPhoneJid(participant);
+
+  const isOwner =
+    participant.admin === "superadmin" ||
+    participant.isSuperAdmin === true;
+
+  const isAdmin =
+    participant.admin === "admin" ||
+    participant.admin === "superadmin" ||
+    participant.admin === true ||
+    participant.isAdmin === true ||
+    participant.isSuperAdmin === true;
 
   return {
     participant,
     name,
     phoneJid,
-    isOwner:
-      participant.admin === "superadmin" ||
-      participant.isSuperAdmin === true,
-    isAdmin:
-      participant.admin === "admin" ||
-      participant.admin === "superadmin" ||
-      participant.isAdmin === true ||
-      participant.isSuperAdmin === true
+    isOwner,
+    isAdmin
   };
 }
 
@@ -305,27 +389,34 @@ function getAdminInfo(participant = {}) {
    FIND PARTICIPANT
 ========================================================= */
 
-function findParticipant(participants, participantId) {
-  if (!Array.isArray(participants)) return null;
+function findParticipant(
+  participants,
+  participantId
+) {
+  if (!Array.isArray(participants)) {
+    return null;
+  }
 
   return (
     participants.find(
-      p =>
-        p?.id === participantId ||
-        p?.lid === participantId ||
-        p?.phoneNumber === participantId
+      participant =>
+        participant?.id === participantId ||
+        participant?.lid === participantId ||
+        participant?.phoneNumber === participantId
     ) || null
   );
 }
 
 /* =========================================================
-   GET MESSAGE TEXT
+   MESSAGE TEXT
 ========================================================= */
 
 function getMessageText(message) {
   const msg = message?.message;
 
-  if (!msg) return "";
+  if (!msg) {
+    return "";
+  }
 
   return (
     msg.conversation ||
@@ -342,7 +433,10 @@ function getMessageText(message) {
 ========================================================= */
 
 function isGroupAllowed(jid) {
-  if (!jid || !jid.endsWith("@g.us")) {
+  if (
+    !jid ||
+    !jid.endsWith("@g.us")
+  ) {
     return false;
   }
 
@@ -376,33 +470,38 @@ const GROUP_RULES = `
 ========================================================= */
 
 const MENU_TEXT = `
-╭━━━━━━━━━━━━━━━━━━╮
-       🤖 *BOT MENU*
-╰━━━━━━━━━━━━━━━━━━╯
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🤖 *BOT MENU*
+╰━━━━━━━━━━━━━━━━━━━━╯
 
-👑 *GROUP COMMANDS*
+╭─❖ 👑 *GROUP COMMANDS*
+│
+│ 1️⃣ /menu
+│ 2️⃣ /bot
+│ 3️⃣ /rules
+│ 4️⃣ /admin
+│ 5️⃣ /members
+│ 6️⃣ /groupinfo
+│ 7️⃣ /id
+│
+╰────────────────────
 
-/menu
-/bot
-/rules
-/admin
-/admins
-/members
-/groupinfo
-/id
+╭─❖ ⚙️ *UTILITY*
+│
+│ 8️⃣ /ping
+│ 9️⃣ /website
+│
+╰────────────────────
 
-⚙️ *UTILITY*
+╭─❖ 🤍 *PIYAS*
+│
+│ 🔟 /piyas
+│
+╰────────────────────
 
-/ping
-/website
-
-❤️ *OWNER*
-
-/piyas
-
-╭━━━━━━━━━━━━━━━━━━╮
-     🤖 WhatsApp Bot
-╰━━━━━━━━━━━━━━━━━━╯
+━━━━━━━━━━━━━━━━━━━━
+        🤖 *PIYAS BOT*
+━━━━━━━━━━━━━━━━━━━━
 `;
 
 /* =========================================================
@@ -411,7 +510,7 @@ const MENU_TEXT = `
 
 const PIYAS_INFO = `
 ╭━━━━━━━━━━━━━━━━━━╮
-       ❤️ *PIYAS*
+       🤍 *PIYAS*
 ╰━━━━━━━━━━━━━━━━━━╯
 
 👤 *Name:* মোঃ আল আমিন
@@ -432,8 +531,92 @@ const PIYAS_INFO = `
 
 🪪 *NID:* 9172******24
 
-❤️ *Thank You*
+🤍 *Thank You*
 `;
+
+/* =========================================================
+   CACHE GROUP PARTICIPANTS
+========================================================= */
+
+function cacheParticipants(
+  participants = []
+) {
+  for (const participant of participants) {
+    if (!participant) continue;
+
+    const phoneJid =
+      getPhoneJid(participant);
+
+    const name =
+      getDisplayName(participant);
+
+    if (
+      phoneJid &&
+      participant.id
+    ) {
+      contactPhoneJids.set(
+        participant.id,
+        phoneJid
+      );
+    }
+
+    if (
+      phoneJid &&
+      participant.lid
+    ) {
+      contactPhoneJids.set(
+        participant.lid,
+        phoneJid
+      );
+    }
+
+    if (
+      phoneJid &&
+      isLidJid(participant.id)
+    ) {
+      lidToPhoneJid.set(
+        participant.id,
+        phoneJid
+      );
+    }
+
+    if (
+      phoneJid &&
+      participant.lid
+    ) {
+      lidToPhoneJid.set(
+        participant.lid,
+        phoneJid
+      );
+    }
+
+    if (
+      name &&
+      name !== "Member"
+    ) {
+      if (participant.id) {
+        contactNames.set(
+          participant.id,
+          name
+        );
+      }
+
+      if (participant.lid) {
+        contactNames.set(
+          participant.lid,
+          name
+        );
+      }
+
+      if (phoneJid) {
+        contactNames.set(
+          phoneJid,
+          name
+        );
+      }
+    }
+  }
+}
 
 /* =========================================================
    START BOT
@@ -441,17 +624,22 @@ const PIYAS_INFO = `
 
 async function startBot() {
   try {
-    const { state, saveCreds } =
-      await useMultiFileAuthState("./auth_info");
+    const {
+      state,
+      saveCreds
+    } = await useMultiFileAuthState(
+      "./auth_info"
+    );
 
     sock = makeWASocket({
       auth: state,
 
       logger,
 
-      browser: Browsers.ubuntu(
-        "Chrome"
-      ),
+      browser:
+        Browsers.ubuntu(
+          "Chrome"
+        ),
 
       markOnlineOnConnect: false,
 
@@ -461,7 +649,7 @@ async function startBot() {
     });
 
     /* =====================================================
-       SAVE AUTH
+       CREDENTIALS
     ===================================================== */
 
     sock.ev.on(
@@ -476,89 +664,47 @@ async function startBot() {
     sock.ev.on(
       "contacts.upsert",
       contacts => {
-        saveContacts(contacts);
+        saveContacts(
+          contacts
+        );
       }
     );
 
     sock.ev.on(
       "contacts.update",
       contacts => {
-        saveContacts(contacts);
+        saveContacts(
+          contacts
+        );
       }
     );
 
     /* =====================================================
-       GROUP PARTICIPANT UPDATES
+       GROUP PARTICIPANT UPDATE
     ===================================================== */
 
     sock.ev.on(
       "group-participants.update",
-      event => {
+      async event => {
         try {
           const participants =
             event?.participants || [];
 
-          for (const participant of participants) {
-            if (!participant) continue;
+          cacheParticipants(
+            participants
+          );
 
-            const phoneJid =
-              getPhoneJid(participant);
-
-            if (
-              isLidJid(participant.id) &&
-              phoneJid
-            ) {
-              lidToPhoneJid.set(
-                participant.id,
-                phoneJid
-              );
-
-              contactPhoneJids.set(
-                participant.id,
-                phoneJid
-              );
-            }
-
-            if (
-              participant.lid &&
-              phoneJid
-            ) {
-              lidToPhoneJid.set(
-                participant.lid,
-                phoneJid
-              );
-
-              contactPhoneJids.set(
-                participant.lid,
-                phoneJid
-              );
-            }
-
-            const name =
-              getDisplayName(participant);
-
-            if (name && name !== "Member") {
-              if (participant.id) {
-                contactNames.set(
-                  participant.id,
-                  name
+          if (event?.id) {
+            try {
+              const metadata =
+                await sock.groupMetadata(
+                  event.id
                 );
-              }
 
-              if (participant.lid) {
-                contactNames.set(
-                  participant.lid,
-                  name
-                );
-              }
-
-              if (phoneJid) {
-                contactNames.set(
-                  phoneJid,
-                  name
-                );
-              }
-            }
+              cacheParticipants(
+                metadata?.participants || []
+              );
+            } catch {}
           }
         } catch (error) {
           console.log(
@@ -578,23 +724,20 @@ async function startBot() {
       async update => {
         const {
           connection,
-          lastDisconnect,
-          qr
+          lastDisconnect
         } = update;
 
-        if (qr) {
-          console.log(
-            "📱 QR code received."
-          );
-        }
-
-        if (connection === "connecting") {
+        if (
+          connection === "connecting"
+        ) {
           console.log(
             "🔄 Connecting to WhatsApp..."
           );
         }
 
-        if (connection === "open") {
+        if (
+          connection === "open"
+        ) {
           console.log(
             "✅ WhatsApp Bot Connected Successfully!"
           );
@@ -628,7 +771,9 @@ async function startBot() {
           }
         }
 
-        if (connection === "close") {
+        if (
+          connection === "close"
+        ) {
           const statusCode =
             new Boom(
               lastDisconnect?.error
@@ -647,9 +792,14 @@ async function startBot() {
               "🔄 Reconnecting..."
             );
 
-            setTimeout(() => {
-              startBot();
-            }, 3000);
+            sock = null;
+
+            setTimeout(
+              () => {
+                startBot();
+              },
+              3000
+            );
           } else {
             console.log(
               "🚪 Logged out. Please pair the bot again."
@@ -657,6 +807,38 @@ async function startBot() {
           }
         }
       }
+    );
+
+    /* =====================================================
+       INITIAL GROUP CACHE
+    ===================================================== */
+
+    try {
+      const groups =
+        await sock.groupFetchAllParticipating();
+
+      for (
+        const group of Object.values(
+          groups || {}
+        )
+      ) {
+        cacheParticipants(
+          group?.participants || []
+        );
+      }
+
+      console.log(
+        "📦 Group participant cache loaded."
+      );
+    } catch (error) {
+      console.log(
+        "⚠️ Initial group cache error:",
+        error?.message
+      );
+    }
+
+    console.log(
+      "🚀 WhatsApp Bot Starting..."
     );
 
     /* =====================================================
@@ -670,16 +852,22 @@ async function startBot() {
           const message =
             messages?.[0];
 
-          if (!message) return;
+          if (!message) {
+            return;
+          }
 
-          if (message.key?.fromMe) {
+          if (
+            message.key?.fromMe
+          ) {
             return;
           }
 
           const remoteJid =
             message.key?.remoteJid;
 
-          if (!remoteJid) return;
+          if (!remoteJid) {
+            return;
+          }
 
           if (
             !remoteJid.endsWith("@g.us")
@@ -688,15 +876,21 @@ async function startBot() {
           }
 
           if (
-            !isGroupAllowed(remoteJid)
+            !isGroupAllowed(
+              remoteJid
+            )
           ) {
             return;
           }
 
           const text =
-            getMessageText(message);
+            getMessageText(
+              message
+            );
 
-          if (!text) return;
+          if (!text) {
+            return;
+          }
 
           const command =
             text
@@ -707,9 +901,9 @@ async function startBot() {
             message.key?.participant ||
             message.key?.remoteJid;
 
-          /* =================================================
-             /MENU
-          ================================================= */
+          /* ===============================================
+             /MENU + /BOT
+          =============================================== */
 
           if (
             command === "/menu" ||
@@ -725,11 +919,13 @@ async function startBot() {
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /RULES
-          ================================================= */
+          =============================================== */
 
-          if (command === "/rules") {
+          if (
+            command === "/rules"
+          ) {
             await sock.sendMessage(
               remoteJid,
               {
@@ -740,9 +936,9 @@ async function startBot() {
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /WEBSITE
-          ================================================= */
+          =============================================== */
 
           if (
             command === "/website"
@@ -755,7 +951,7 @@ async function startBot() {
 
 🔗 https://example.com
 
-❤️ Visit our website for more information.
+🤍 Visit our website for more information.
 `
               }
             );
@@ -763,15 +959,17 @@ async function startBot() {
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /PING
-          ================================================= */
+          =============================================== */
 
-          if (command === "/ping") {
+          if (
+            command === "/ping"
+          ) {
             const start =
               Date.now();
 
-            const checking =
+            const msg =
               await sock.sendMessage(
                 remoteJid,
                 {
@@ -789,18 +987,20 @@ async function startBot() {
                 text:
                   `🏓 *PONG!*\n\n⚡ Response: ${ping}ms\n🤖 Bot: Online`,
                 edit:
-                  checking.key
+                  msg.key
               }
             );
 
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /ID
-          ================================================= */
+          =============================================== */
 
-          if (command === "/id") {
+          if (
+            command === "/id"
+          ) {
             await sock.sendMessage(
               remoteJid,
               {
@@ -812,9 +1012,9 @@ async function startBot() {
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /GROUPINFO
-          ================================================= */
+          =============================================== */
 
           if (
             command === "/groupinfo"
@@ -828,12 +1028,18 @@ async function startBot() {
               metadata?.participants ||
               [];
 
+            cacheParticipants(
+              participants
+            );
+
             const admins =
               participants.filter(
                 p =>
                   p?.admin === "admin" ||
                   p?.admin === "superadmin" ||
-                  p?.admin === true
+                  p?.admin === true ||
+                  p?.isAdmin === true ||
+                  p?.isSuperAdmin === true
               );
 
             await sock.sendMessage(
@@ -844,26 +1050,34 @@ async function startBot() {
        👥 *GROUP INFO*
 ╰━━━━━━━━━━━━━━━━━━╯
 
-📛 *Name:* ${metadata?.subject || "Unknown"}
+📛 *Name:* ${
+                  metadata?.subject ||
+                  "Unknown"
+                }
 
 🆔 *ID:* ${remoteJid}
 
-👥 *Members:* ${participants.length}
+👥 *Members:* ${
+                  participants.length
+                }
 
-👑 *Admins:* ${admins.length}
+👑 *Admins:* ${
+                  admins.length
+                }
 
 📅 *Created:* ${
                   metadata?.creation
                     ? new Date(
-                        Number(metadata.creation) *
-                          1000
+                        Number(
+                          metadata.creation
+                        ) * 1000
                       ).toLocaleString(
                         "en-BD"
                       )
                     : "Unknown"
                 }
 
-❤️ *Powered by Piyas*
+🤍 *Powered by Piyas*
 `
               }
             );
@@ -871,9 +1085,9 @@ async function startBot() {
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /MEMBERS
-          ================================================= */
+          =============================================== */
 
           if (
             command === "/members"
@@ -887,7 +1101,13 @@ async function startBot() {
               metadata?.participants ||
               [];
 
-            if (!participants.length) {
+            cacheParticipants(
+              participants
+            );
+
+            if (
+              participants.length === 0
+            ) {
               await sock.sendMessage(
                 remoteJid,
                 {
@@ -915,11 +1135,11 @@ async function startBot() {
                   participant
                 );
 
-              const jid =
-                info.phoneJid;
-
               const name =
                 info.name;
+
+              const jid =
+                info.phoneJid;
 
               if (jid) {
                 mentions.push(jid);
@@ -938,21 +1158,26 @@ async function startBot() {
               remoteJid,
               {
                 text:
-                  `👥 *GROUP MEMBERS*\n\n${lines.join("\n")}\n\n👥 মোট Member: ${participants.length} জন`,
-                mentions
+                  `👥 *GROUP MEMBERS*\n\n${lines.join(
+                    "\n"
+                  )}\n\n👥 মোট Member: ${participants.length} জন`,
+                mentions: [
+                  ...new Set(
+                    mentions
+                  )
+                ]
               }
             );
 
             return;
           }
 
-          /* =================================================
-             /ADMIN /ADMINS
-          ================================================= */
+          /* ===============================================
+             /ADMIN
+          =============================================== */
 
           if (
-            command === "/admin" ||
-            command === "/admins"
+            command === "/admin"
           ) {
             const metadata =
               await sock.groupMetadata(
@@ -962,6 +1187,10 @@ async function startBot() {
             const participants =
               metadata?.participants ||
               [];
+
+            cacheParticipants(
+              participants
+            );
 
             const adminParticipants =
               participants.filter(
@@ -1008,9 +1237,9 @@ async function startBot() {
 
             let number = 1;
 
-            /* ===============================================
+            /* =============================================
                GROUP OWNER
-            =============================================== */
+            ============================================= */
 
             for (
               const participant of owners
@@ -1020,7 +1249,7 @@ async function startBot() {
                   participant
                 );
 
-              let name =
+              const name =
                 info.name ||
                 "Group Owner";
 
@@ -1042,9 +1271,9 @@ async function startBot() {
               number++;
             }
 
-            /* ===============================================
+            /* =============================================
                OTHER ADMINS
-            =============================================== */
+            ============================================= */
 
             for (
               const participant of normalAdmins
@@ -1054,7 +1283,7 @@ async function startBot() {
                   participant
                 );
 
-              let name =
+              const name =
                 info.name ||
                 "Admin";
 
@@ -1083,9 +1312,11 @@ async function startBot() {
 
 ${lines.join("\n\n")}
 
-👥 *মোট Admin:* ${adminParticipants.length} জন
+👥 *মোট Admin:* ${
+              adminParticipants.length
+            } জন
 
-❤️ *Piyas*
+🤍 *Piyas*
 `;
 
             await sock.sendMessage(
@@ -1093,7 +1324,9 @@ ${lines.join("\n\n")}
               {
                 text: adminText,
                 mentions: [
-                  ...new Set(mentions)
+                  ...new Set(
+                    mentions
+                  )
                 ]
               }
             );
@@ -1101,11 +1334,13 @@ ${lines.join("\n\n")}
             return;
           }
 
-          /* =================================================
+          /* ===============================================
              /PIYAS
-          ================================================= */
+          =============================================== */
 
-          if (command === "/piyas") {
+          if (
+            command === "/piyas"
+          ) {
             await sock.sendMessage(
               remoteJid,
               {
@@ -1116,9 +1351,9 @@ ${lines.join("\n\n")}
             return;
           }
 
-          /* =================================================
-             NEW MEMBER WELCOME
-          ================================================= */
+          /* ===============================================
+             /WELCOME-TEST
+          =============================================== */
 
           if (
             command === "/welcome-test"
@@ -1128,9 +1363,17 @@ ${lines.join("\n\n")}
                 remoteJid
               );
 
+            const participants =
+              metadata?.participants ||
+              [];
+
+            cacheParticipants(
+              participants
+            );
+
             const participant =
               findParticipant(
-                metadata?.participants || [],
+                participants,
                 sender
               );
 
@@ -1151,12 +1394,14 @@ ${lines.join("\n\n")}
                 participant
               );
 
-            if (info.phoneJid) {
+            if (
+              info.phoneJid
+            ) {
               await sock.sendMessage(
                 remoteJid,
                 {
                   text:
-                    `👋 Welcome @${info.name}! ❤️`,
+                    `👋 Welcome @${info.name}! 🤍`,
                   mentions: [
                     info.phoneJid
                   ]
@@ -1167,7 +1412,7 @@ ${lines.join("\n\n")}
                 remoteJid,
                 {
                   text:
-                    `👋 Welcome ${info.name}! ❤️`
+                    `👋 Welcome ${info.name}! 🤍`
                 }
               );
             }
@@ -1184,112 +1429,20 @@ ${lines.join("\n\n")}
       }
     );
 
-    /* =====================================================
-       GROUP CACHE / CONTACT REFRESH
-    ===================================================== */
-
-    try {
-      const groups =
-        await sock.groupFetchAllParticipating();
-
-      for (const group of Object.values(
-        groups || {}
-      )) {
-        const participants =
-          group?.participants || [];
-
-        for (
-          const participant of participants
-        ) {
-          const phoneJid =
-            getPhoneJid(participant);
-
-          if (
-            phoneJid &&
-            participant.id
-          ) {
-            contactPhoneJids.set(
-              participant.id,
-              phoneJid
-            );
-
-            if (
-              isLidJid(participant.id)
-            ) {
-              lidToPhoneJid.set(
-                participant.id,
-                phoneJid
-              );
-            }
-          }
-
-          if (
-            phoneJid &&
-            participant.lid
-          ) {
-            contactPhoneJids.set(
-              participant.lid,
-              phoneJid
-            );
-
-            lidToPhoneJid.set(
-              participant.lid,
-              phoneJid
-            );
-          }
-
-          const name =
-            getDisplayName(
-              participant
-            );
-
-          if (
-            name &&
-            name !== "Member"
-          ) {
-            if (participant.id) {
-              contactNames.set(
-                participant.id,
-                name
-              );
-            }
-
-            if (participant.lid) {
-              contactNames.set(
-                participant.lid,
-                name
-              );
-            }
-
-            if (phoneJid) {
-              contactNames.set(
-                phoneJid,
-                name
-              );
-            }
-          }
-        }
-      }
-    } catch (error) {
-      console.log(
-        "⚠️ Initial group cache error:",
-        error?.message
-      );
-    }
-
-    console.log(
-      "🚀 WhatsApp Bot Starting..."
-    );
-
   } catch (error) {
     console.log(
       "❌ Failed to start bot:",
       error
     );
 
-    setTimeout(() => {
-      startBot();
-    }, 5000);
+    sock = null;
+
+    setTimeout(
+      () => {
+        startBot();
+      },
+      5000
+    );
   }
 }
 
