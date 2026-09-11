@@ -23,7 +23,6 @@ const AUTH_FOLDER = "./auth_info";
 const PHONE_NUMBER =
   process.env.PHONE_NUMBER || "";
 
-// Multiple Group IDs supported
 const GROUP_IDS = (process.env.GROUP_ID || "")
   .split(",")
   .map(id => id.trim())
@@ -42,7 +41,7 @@ const server = http.createServer(
     if (req.url === "/health") {
 
       res.writeHead(200, {
-        "Content-Type": "text/plain"
+        "Content-Type": "text/plain; charset=utf-8"
       });
 
       res.end(
@@ -53,12 +52,13 @@ const server = http.createServer(
     }
 
     res.writeHead(200, {
-      "Content-Type": "text/plain"
+      "Content-Type": "text/plain; charset=utf-8"
     });
 
     res.end(
       "WhatsApp Bot is Online."
     );
+
   }
 );
 
@@ -92,7 +92,7 @@ const RULES = `
 
 6️⃣ সন্দেহজনক Link, APK, File বা Website শেয়ার করা নিষেধ।
 
-7️⃣ কারও ব্যক্তিগত তথ্য, ফোন নম্বর বা Screenshot অনুমতি ছাড়া শেয়ার করবেন না।
+7️⃣ কারও ব্যক্তিগত তথ্য, ফোন নম্বর বা Screenshot অনুমতি ছাড়া শেয়ার করা যাবে না।
 
 8️⃣ Fake Account, Scam বা প্রতারণামূলক কার্যক্রম সম্পূর্ণ নিষিদ্ধ।
 
@@ -166,7 +166,7 @@ Admin-এর উপস্থিতি বা পরামর্শ ছাড়া 
 `;
 
 // ======================================================
-// PIYAS PERSONAL INFORMATION
+// PIYAS INFORMATION
 // ======================================================
 
 const PIYAS_INFO = `
@@ -195,7 +195,7 @@ Unmarried (অবিবাহিত)
 
 🏠 ঠিকানা:
 গ্রাম/রাস্তা: বলদার চর, নান্দাইল
-ডাকঘর: হেংগু বাজার - ২২৯০
+ডাকঘর: হেমগঞ্জ বাজার - ২২৯০
 নান্দাইল, ময়মনসিংহ
 
 🆔 NID:
@@ -218,16 +218,66 @@ const MENU = `
 5️⃣ /id — Group ID
 6️⃣ /groupinfo — Group Information
 7️⃣ /members — Member Count
-8️⃣ /piyas — Piyas Information
+8️⃣ /admin — Admin List + Mention
+9️⃣ /admins — Admin List + Mention
+🔟 /piyas — Piyas Information
 
 ❤️ *Piyas*
 `;
 
 // ======================================================
-// CONTACT CACHE
+// CONTACT NAME CACHE
 // ======================================================
 
 const contactNames = new Map();
+
+// ======================================================
+// CONTACT PHONE JID CACHE
+// ======================================================
+
+const contactPhoneJids = new Map();
+
+// ======================================================
+// CLEAN PHONE
+// ======================================================
+
+function cleanPhoneNumber(
+  value
+) {
+
+  if (
+    typeof value !== "string"
+  ) {
+
+    return null;
+
+  }
+
+  if (
+    value.includes("@s.whatsapp.net")
+  ) {
+
+    return value;
+
+  }
+
+  const phone =
+    value.replace(
+      /[^0-9]/g,
+      ""
+    );
+
+  if (
+    phone.length < 8
+  ) {
+
+    return null;
+
+  }
+
+  return `${phone}@s.whatsapp.net`;
+
+}
 
 // ======================================================
 // SAVE CONTACTS
@@ -237,11 +287,18 @@ function saveContacts(
   contacts = []
 ) {
 
-  if (!Array.isArray(contacts)) {
+  if (
+    !Array.isArray(contacts)
+  ) {
+
     return;
+
   }
 
-  for (const contact of contacts) {
+  for (
+    const contact
+    of contacts
+  ) {
 
     try {
 
@@ -249,7 +306,9 @@ function saveContacts(
         !contact ||
         typeof contact !== "object"
       ) {
+
         continue;
+
       }
 
       const name =
@@ -260,15 +319,24 @@ function saveContacts(
         contact.pushName ||
         null;
 
-      if (
-        typeof name !== "string" ||
-        !name.trim()
-      ) {
-        continue;
-      }
-
       const cleanName =
-        name.trim();
+        typeof name === "string" &&
+        name.trim()
+          ? name.trim()
+          : null;
+
+      const phoneJid =
+        cleanPhoneNumber(
+          contact.phoneNumber
+        ) ||
+        (
+          typeof contact.id === "string" &&
+          contact.id.endsWith(
+            "@s.whatsapp.net"
+          )
+            ? contact.id
+            : null
+        );
 
       const ids = [
         contact.id,
@@ -276,22 +344,46 @@ function saveContacts(
         contact.phoneNumber
       ];
 
-      for (const id of ids) {
+      for (
+        const id
+        of ids
+      ) {
 
         if (
-          typeof id === "string" &&
-          id.trim()
+          typeof id !== "string" ||
+          !id.trim()
         ) {
 
+          continue;
+
+        }
+
+        const cleanId =
+          id.trim();
+
+        if (cleanName) {
+
           contactNames.set(
-            id,
+            cleanId,
             cleanName
           );
 
         }
+
+        if (phoneJid) {
+
+          contactPhoneJids.set(
+            cleanId,
+            phoneJid
+          );
+
+        }
+
       }
 
-    } catch (error) {
+    } catch (
+      error
+    ) {
 
       console.log(
         "⚠️ Contact Cache Error:",
@@ -299,7 +391,9 @@ function saveContacts(
       );
 
     }
+
   }
+
 }
 
 // ======================================================
@@ -314,7 +408,9 @@ function getDisplayName(
     !participant ||
     typeof participant !== "object"
   ) {
+
     return "Unknown Member";
+
   }
 
   const possibleIds = [
@@ -323,7 +419,10 @@ function getDisplayName(
     participant.phoneNumber
   ];
 
-  for (const id of possibleIds) {
+  for (
+    const id
+    of possibleIds
+  ) {
 
     if (
       typeof id === "string" &&
@@ -341,7 +440,9 @@ function getDisplayName(
         return cached.trim();
 
       }
+
     }
+
   }
 
   const possibleNames = [
@@ -352,7 +453,10 @@ function getDisplayName(
     participant.pushName
   ];
 
-  for (const name of possibleNames) {
+  for (
+    const name
+    of possibleNames
+  ) {
 
     if (
       typeof name === "string" &&
@@ -362,6 +466,7 @@ function getDisplayName(
       return name.trim();
 
     }
+
   }
 
   const id =
@@ -370,14 +475,18 @@ function getDisplayName(
       : "";
 
   if (
-    id.endsWith("@s.whatsapp.net")
+    id.endsWith(
+      "@s.whatsapp.net"
+    )
   ) {
 
-    return id.split("@")[0];
+    return id
+      .split("@")[0];
 
   }
 
   return "Unknown Member";
+
 }
 
 // ======================================================
@@ -418,6 +527,165 @@ function findParticipant(
     null
 
   );
+
+}
+
+// ======================================================
+// GET PHONE JID
+// ======================================================
+
+function getPhoneJid(
+  participant
+) {
+
+  if (
+    !participant ||
+    typeof participant !== "object"
+  ) {
+
+    return null;
+
+  }
+
+  // ------------------------------------------
+  // Direct phoneNumber
+  // ------------------------------------------
+
+  if (
+    typeof participant.phoneNumber ===
+      "string"
+  ) {
+
+    const direct =
+      cleanPhoneNumber(
+        participant.phoneNumber
+      );
+
+    if (direct) {
+
+      return direct;
+
+    }
+
+  }
+
+  // ------------------------------------------
+  // Direct ID
+  // ------------------------------------------
+
+  if (
+    typeof participant.id === "string" &&
+    participant.id.endsWith(
+      "@s.whatsapp.net"
+    )
+  ) {
+
+    return participant.id;
+
+  }
+
+  // ------------------------------------------
+  // LID -> Phone JID cache
+  // ------------------------------------------
+
+  const possibleIds = [
+    participant.id,
+    participant.lid
+  ];
+
+  for (
+    const id
+    of possibleIds
+  ) {
+
+    if (
+      typeof id !== "string"
+    ) {
+
+      continue;
+
+    }
+
+    const cached =
+      contactPhoneJids.get(id);
+
+    if (
+      typeof cached === "string" &&
+      cached.endsWith(
+        "@s.whatsapp.net"
+      )
+    ) {
+
+      return cached;
+
+    }
+
+  }
+
+  return null;
+
+}
+
+// ======================================================
+// GET MENTION DATA
+// ======================================================
+
+function getMentionData(
+  participant,
+  participants = []
+) {
+
+  let person =
+    participant;
+
+  // ------------------------------------------
+  // Try to find complete participant
+  // ------------------------------------------
+
+  if (
+    typeof participant === "string"
+  ) {
+
+    person =
+      findParticipant(
+        participants,
+        participant
+      ) || {
+        id: participant
+      };
+
+  }
+
+  if (
+    !person ||
+    typeof person !== "object"
+  ) {
+
+    return {
+      name: "Member",
+      jid: null
+    };
+
+  }
+
+  const name =
+    getDisplayName(
+      person
+    );
+
+  const jid =
+    getPhoneJid(
+      person
+    );
+
+  return {
+    name:
+      name === "Unknown Member"
+        ? "Member"
+        : name,
+    jid
+  };
+
 }
 
 // ======================================================
@@ -429,7 +697,9 @@ function getMessageText(
 ) {
 
   if (!message) {
+
     return "";
+
   }
 
   if (
@@ -482,67 +752,7 @@ function getMessageText(
   }
 
   return "";
-}
 
-// ======================================================
-// GET SAFE PHONE JID
-// ======================================================
-
-function getPhoneJid(
-  participant
-) {
-
-  if (
-    !participant ||
-    typeof participant !== "object"
-  ) {
-
-    return null;
-
-  }
-
-  if (
-    typeof participant.phoneNumber ===
-      "string" &&
-    participant.phoneNumber.includes("@")
-  ) {
-
-    return participant.phoneNumber;
-
-  }
-
-  if (
-    typeof participant.phoneNumber ===
-    "string"
-  ) {
-
-    const phone =
-      participant.phoneNumber.replace(
-        /[^0-9]/g,
-        ""
-      );
-
-    if (
-      phone.length >= 8
-    ) {
-
-      return `${phone}@s.whatsapp.net`;
-
-    }
-  }
-
-  if (
-    typeof participant.id === "string" &&
-    participant.id.endsWith(
-      "@s.whatsapp.net"
-    )
-  ) {
-
-    return participant.id;
-
-  }
-
-  return null;
 }
 
 // ======================================================
@@ -584,7 +794,9 @@ let pairingTimer = null;
 function scheduleReconnect() {
 
   if (reconnectTimer) {
+
     return;
+
   }
 
   reconnectTimer =
@@ -602,6 +814,7 @@ function scheduleReconnect() {
       },
       5000
     );
+
 }
 
 // ======================================================
@@ -611,7 +824,9 @@ function scheduleReconnect() {
 async function startBot() {
 
   if (botStarting) {
+
     return;
+
   }
 
   botStarting = true;
@@ -628,6 +843,7 @@ async function startBot() {
     console.log(
       "=========================================="
     );
+    console.log("");
 
     // ==================================================
     // AUTH
@@ -648,11 +864,13 @@ async function startBot() {
     const sock =
       makeWASocket({
 
-        auth: state,
+        auth:
+          state,
 
-        logger: P({
-          level: "info"
-        }),
+        logger:
+          P({
+            level: "info"
+          }),
 
         printQRInTerminal:
           false,
@@ -752,7 +970,7 @@ async function startBot() {
 
               console.log("");
               console.log(
-                "📱 New WhatsApp number detected."
+                "📱 WhatsApp number detected."
               );
 
               console.log(
@@ -763,6 +981,16 @@ async function startBot() {
                 await sock.requestPairingCode(
                   cleanNumber
                 );
+
+              const formattedCode =
+                typeof code === "string"
+                  ? (
+                      code
+                        .match(/.{1,4}/g)
+                        ?.join("-") ||
+                      code
+                    )
+                  : code;
 
               console.log("");
               console.log(
@@ -778,7 +1006,7 @@ async function startBot() {
                 `📱 Number: ${cleanNumber}`
               );
               console.log(
-                `🔑 Pairing Code: ${code}`
+                `🔑 Pairing Code: ${formattedCode}`
               );
               console.log(
                 "=========================================="
@@ -799,7 +1027,9 @@ async function startBot() {
 
               console.log("");
 
-            } catch (error) {
+            } catch (
+              error
+            ) {
 
               console.log("");
               console.log(
@@ -810,18 +1040,6 @@ async function startBot() {
                 error?.message ||
                 error
               );
-
-              if (error?.stack) {
-
-                console.log(
-                  "📌 Error Stack:"
-                );
-
-                console.log(
-                  error.stack
-                );
-
-              }
 
               console.log("");
 
@@ -843,10 +1061,6 @@ async function startBot() {
 
       console.log(
         "⚠️ PHONE_NUMBER is not set."
-      );
-
-      console.log(
-        "⚠️ Add PHONE_NUMBER in .env"
       );
 
     }
@@ -918,7 +1132,6 @@ async function startBot() {
           console.log(
             "=========================================="
           );
-
           console.log("");
 
         }
@@ -1001,28 +1214,13 @@ async function startBot() {
             403
           ) {
 
-            console.log("");
             console.log(
-              "🚫 WhatsApp rejected the connection (403)."
+              "🚫 WhatsApp rejected the connection."
             );
-
-            console.log(
-              "⚠️ Stop the bot and check the account/session."
-            );
-
-            console.log(
-              "⚠️ If using a new number, delete auth_info and pair again."
-            );
-
-            console.log("");
 
             return;
 
           }
-
-          console.log(
-            "🔄 Reconnecting in 5 seconds..."
-          );
 
           scheduleReconnect();
 
@@ -1032,7 +1230,7 @@ async function startBot() {
     );
 
     // ==================================================
-    // NEW MEMBER WELCOME
+    // NEW GROUP MEMBER
     // ==================================================
 
     sock.ev.on(
@@ -1057,7 +1255,9 @@ async function startBot() {
               : "";
 
           if (!groupId) {
+
             return;
+
           }
 
           if (
@@ -1069,19 +1269,6 @@ async function startBot() {
             return;
 
           }
-
-          console.log("");
-          console.log(
-            "=========================================="
-          );
-
-          console.log(
-            "🎉 NEW MEMBER EVENT"
-          );
-
-          console.log(
-            "=========================================="
-          );
 
           const metadata =
             await sock.groupMetadata(
@@ -1101,10 +1288,6 @@ async function startBot() {
               ? metadata.participants
               : [];
 
-          console.log(
-            `👥 Group: ${groupName}`
-          );
-
           for (
             const rawParticipant
             of update.participants || []
@@ -1112,219 +1295,72 @@ async function startBot() {
 
             try {
 
-              let participantId =
-                null;
-
-              if (
-                typeof rawParticipant ===
-                "string"
-              ) {
-
-                participantId =
-                  rawParticipant;
-
-              } else if (
-                rawParticipant &&
-                typeof rawParticipant ===
-                  "object"
-              ) {
-
-                participantId =
-                  typeof rawParticipant.id ===
-                  "string"
-                    ? rawParticipant.id
-                    : typeof rawParticipant.lid ===
-                      "string"
-                    ? rawParticipant.lid
-                    : typeof rawParticipant.phoneNumber ===
-                      "string"
-                    ? rawParticipant.phoneNumber
-                    : null;
-
-              }
-
-              if (
-                !participantId
-              ) {
-
-                continue;
-
-              }
-
-              const participant =
-                findParticipant(
-                  participants,
-                  participantId
+              const mentionData =
+                getMentionData(
+                  rawParticipant,
+                  participants
                 );
 
-              let memberName =
-                participant
-                  ? getDisplayName(
-                      participant
-                    )
-                  : "New Member";
-
-              if (
-                !memberName ||
-                memberName ===
-                  "Unknown Member"
-              ) {
-
-                memberName =
-                  "New Member";
-
-              }
-
-              memberName =
-                String(
-                  memberName
-                );
-
-              const safeGroupName =
-                String(
-                  groupName
-                );
-
-              const welcomeMessage =
-                String(
-                  WELCOME
-                    .replace(
-                      "{member}",
-                      `@${memberName}`
-                    )
-                    .replace(
-                      "{group}",
-                      safeGroupName
-                    )
-                );
-
-              let sent =
-                false;
+              const memberName =
+                mentionData.name;
 
               const mentionJid =
-                getPhoneJid(
-                  participant
-                );
+                mentionData.jid;
+
+              const welcomeMessage =
+                WELCOME
+                  .replace(
+                    "{member}",
+                    mentionJid
+                      ? `@${memberName}`
+                      : memberName
+                  )
+                  .replace(
+                    "{group}",
+                    String(groupName)
+                  );
 
               if (
-                typeof mentionJid ===
-                  "string" &&
-                mentionJid.endsWith(
-                  "@s.whatsapp.net"
-                )
+                mentionJid
               ) {
-
-                try {
-
-                  await sock.sendMessage(
-                    groupId,
-                    {
-                      text:
-                        welcomeMessage,
-
-                      mentions: [
-                        mentionJid
-                      ]
-                    }
-                  );
-
-                  console.log(
-                    "✅ Welcome sent with mention."
-                  );
-
-                  sent =
-                    true;
-
-                } catch (
-                  mentionError
-                ) {
-
-                  console.log(
-                    "⚠️ Mention failed:"
-                  );
-
-                  console.log(
-                    mentionError?.message ||
-                    mentionError
-                  );
-
-                }
-
-              }
-
-              if (!sent) {
-
-                const fallbackMessage =
-                  String(
-                    WELCOME
-                      .replace(
-                        "{member}",
-                        memberName
-                      )
-                      .replace(
-                        "{group}",
-                        safeGroupName
-                      )
-                  );
 
                 await sock.sendMessage(
                   groupId,
                   {
                     text:
-                      fallbackMessage
+                      welcomeMessage,
+
+                    mentions: [
+                      mentionJid
+                    ]
                   }
                 );
 
-                console.log(
-                  "✅ Welcome sent."
+              } else {
+
+                await sock.sendMessage(
+                  groupId,
+                  {
+                    text:
+                      welcomeMessage
+                  }
                 );
 
               }
 
-              console.log("");
               console.log(
-                "🎉 NEW MEMBER JOINED"
+                `🎉 Welcome sent to ${memberName}`
               );
-
-              console.log(
-                `👤 Name: ${memberName}`
-              );
-
-              console.log(
-                `🆔 ID: ${participantId}`
-              );
-
-              console.log(
-                `👥 Group: ${safeGroupName}`
-              );
-
-              console.log("");
 
             } catch (
-              memberError
+              error
             ) {
 
-              console.log("");
               console.log(
-                "❌ Individual Welcome Error:"
+                "❌ Welcome Member Error:",
+                error?.message ||
+                error
               );
-
-              console.log(
-                memberError?.message ||
-                memberError
-              );
-
-              if (
-                memberError?.stack
-              ) {
-
-                console.log(
-                  memberError.stack
-                );
-
-              }
-
-              console.log("");
 
             }
 
@@ -1334,27 +1370,11 @@ async function startBot() {
           error
         ) {
 
-          console.log("");
           console.log(
-            "❌ Group Welcome Error:"
-          );
-
-          console.log(
+            "❌ Group Welcome Error:",
             error?.message ||
             error
           );
-
-          if (
-            error?.stack
-          ) {
-
-            console.log(
-              error.stack
-            );
-
-          }
-
-          console.log("");
 
         }
 
@@ -1378,231 +1398,234 @@ async function startBot() {
             of messages || []
           ) {
 
-            if (
-              !msg?.message
-            ) {
+            try {
 
-              continue;
+              if (
+                !msg?.message
+              ) {
 
-            }
+                continue;
 
-            if (
-              msg.key?.fromMe
-            ) {
+              }
 
-              continue;
+              if (
+                msg.key?.fromMe
+              ) {
 
-            }
+                continue;
 
-            const remoteJid =
-              msg.key?.remoteJid;
+              }
 
-            if (
-              typeof remoteJid !==
-                "string" ||
-              !remoteJid.endsWith(
-                "@g.us"
-              )
-            ) {
+              const remoteJid =
+                msg.key?.remoteJid;
 
-              continue;
+              if (
+                typeof remoteJid !==
+                  "string" ||
+                !remoteJid.endsWith(
+                  "@g.us"
+                )
+              ) {
 
-            }
+                continue;
 
-            if (
-              !isAllowedGroup(
-                remoteJid
-              )
-            ) {
+              }
 
-              continue;
+              if (
+                !isAllowedGroup(
+                  remoteJid
+                )
+              ) {
 
-            }
+                continue;
 
-            const text =
-              getMessageText(
-                msg.message
-              ).trim();
+              }
 
-            if (!text) {
+              const text =
+                getMessageText(
+                  msg.message
+                ).trim();
 
-              continue;
+              if (!text) {
 
-            }
+                continue;
 
-            const command =
-              text
-                .split(/\s+/)[0]
-                .toLowerCase();
+              }
 
-            // ==========================================
-            // /MENU অথবা /BOT
-            // ==========================================
+              const command =
+                text
+                  .split(/\s+/)[0]
+                  .toLowerCase();
 
-            if (
-              command === "/menu" ||
-              command === "/bot"
-            ) {
-
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    MENU
-                }
+              console.log(
+                `📩 Command: ${command} | Group: ${remoteJid}`
               );
 
-              continue;
+              // ==========================================
+              // /MENU অথবা /BOT
+              // ==========================================
 
-            }
+              if (
+                command === "/menu" ||
+                command === "/bot"
+              ) {
 
-            // ==========================================
-            // /RULES
-            // ==========================================
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      MENU
+                  }
+                );
 
-            if (
-              command ===
-              "/rules"
-            ) {
+                continue;
 
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    RULES
-                }
-              );
+              }
 
-              continue;
+              // ==========================================
+              // /RULES
+              // ==========================================
 
-            }
+              if (
+                command === "/rules"
+              ) {
 
-            // ==========================================
-            // /WEBSITE
-            // ==========================================
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      RULES
+                  }
+                );
 
-            if (
-              command ===
-              "/website"
-            ) {
+                continue;
 
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    `🌐 *Official Website*\n\n${WEBSITE_URL}`
-                }
-              );
+              }
 
-              continue;
+              // ==========================================
+              // /WEBSITE
+              // ==========================================
 
-            }
+              if (
+                command === "/website"
+              ) {
 
-            // ==========================================
-            // /PING
-            // ==========================================
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      `🌐 *Official Website*\n\n${WEBSITE_URL}`
+                  }
+                );
 
-            if (
-              command ===
-              "/ping"
-            ) {
+                continue;
 
-              const start =
-                Date.now();
+              }
 
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    "🏓 Checking Bot..."
-                }
-              );
+              // ==========================================
+              // /PING
+              // ==========================================
 
-              const ping =
-                Date.now() -
-                start;
+              if (
+                command === "/ping"
+              ) {
 
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    `🏓 *PONG!*\n\n🟢 Bot Status: ONLINE\n⚡ Response: ${ping}ms\n🤖 WhatsApp Bot is working perfectly.`
-                }
-              );
+                const start =
+                  Date.now();
 
-              continue;
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      "🏓 Checking Bot..."
+                  }
+                );
 
-            }
+                const ping =
+                  Date.now() -
+                  start;
 
-            // ==========================================
-            // /ID
-            // ==========================================
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      `🏓 *PONG!*\n\n🟢 Bot Status: ONLINE\n⚡ Response: ${ping}ms\n🤖 WhatsApp Bot is working perfectly.`
+                  }
+                );
 
-            if (
-              command ===
-              "/id"
-            ) {
+                continue;
 
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    `🆔 *Group ID*\n\n${remoteJid}`
-                }
-              );
+              }
 
-              continue;
+              // ==========================================
+              // /ID
+              // ==========================================
 
-            }
+              if (
+                command === "/id"
+              ) {
 
-            // ==========================================
-            // /GROUPINFO
-            // ==========================================
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      `🆔 *GROUP ID*\n\n${remoteJid}`
+                  }
+                );
 
-            if (
-              command ===
-              "/groupinfo"
-            ) {
+                continue;
 
-              try {
+              }
 
-                const metadata =
-                  await sock.groupMetadata(
-                    remoteJid
-                  );
+              // ==========================================
+              // /GROUPINFO
+              // ==========================================
 
-                const participants =
-                  Array.isArray(
-                    metadata?.participants
-                  )
-                    ? metadata.participants
-                    : [];
+              if (
+                command === "/groupinfo"
+              ) {
 
-                const admins =
-                  participants.filter(
-                    participant =>
-                      participant?.admin
-                  );
+                try {
 
-                const subject =
-                  typeof metadata?.subject ===
-                  "string"
-                    ? metadata.subject
-                    : "Unknown Group";
+                  const metadata =
+                    await sock.groupMetadata(
+                      remoteJid
+                    );
 
-                const description =
-                  typeof metadata?.desc ===
-                  "string"
-                    ? metadata.desc
-                    : "No description";
+                  const participants =
+                    Array.isArray(
+                      metadata?.participants
+                    )
+                      ? metadata.participants
+                      : [];
 
-                const owner =
-                  typeof metadata?.owner ===
-                  "string"
-                    ? metadata.owner
-                    : "Unknown";
+                  const admins =
+                    participants.filter(
+                      participant =>
+                        participant?.admin === "admin" ||
+                        participant?.admin === "superadmin" ||
+                        participant?.admin === true
+                    );
 
-                const info = `
+                  const subject =
+                    typeof metadata?.subject ===
+                    "string"
+                      ? metadata.subject
+                      : "Unknown Group";
+
+                  const description =
+                    typeof metadata?.desc ===
+                    "string"
+                      ? metadata.desc
+                      : "No description";
+
+                  const owner =
+                    typeof metadata?.owner ===
+                    "string"
+                      ? metadata.owner
+                      : "Unknown";
+
+                  const info = `
 👥 *GROUP INFORMATION*
 
 📛 Name:
@@ -1624,119 +1647,337 @@ ${owner}
 ${description}
 `;
 
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      info
-                  }
-                );
-
-              } catch (
-                error
-              ) {
-
-                console.log(
-                  "❌ GroupInfo Error:",
-                  error?.message ||
-                  error
-                );
-
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      "❌ Group information পাওয়া যায়নি।"
-                  }
-                );
-
-              }
-
-              continue;
-
-            }
-
-            // ==========================================
-            // /MEMBERS
-            // ==========================================
-
-            if (
-              command ===
-              "/members"
-            ) {
-
-              try {
-
-                const metadata =
-                  await sock.groupMetadata(
-                    remoteJid
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        info
+                    }
                   );
 
-                const count =
-                  Array.isArray(
-                    metadata?.participants
-                  )
-                    ? metadata.participants.length
-                    : 0;
-
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      `👥 *Group Members*\n\nমোট সদস্য: *${count} জন*`
-                  }
-                );
-
-              } catch (
-                error
-              ) {
-
-                console.log(
-                  "❌ Members Error:",
-                  error?.message ||
+                } catch (
                   error
-                );
+                ) {
 
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      "❌ Member count পাওয়া যায়নি।"
-                  }
-                );
+                  console.log(
+                    "❌ GroupInfo Error:",
+                    error?.message ||
+                    error
+                  );
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        "❌ Group information পাওয়া যায়নি।"
+                    }
+                  );
+
+                }
+
+                continue;
 
               }
 
-              continue;
+              // ==========================================
+              // /MEMBERS
+              // ==========================================
 
-            }
+              if (
+                command === "/members"
+              ) {
 
-            // ==========================================
-            // /PIYAS
-            // ==========================================
+                try {
 
-            if (
-              command ===
-              "/piyas"
+                  const metadata =
+                    await sock.groupMetadata(
+                      remoteJid
+                    );
+
+                  const count =
+                    Array.isArray(
+                      metadata?.participants
+                    )
+                      ? metadata.participants.length
+                      : 0;
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        `👥 *GROUP MEMBERS*\n\nমোট সদস্য: *${count} জন*`
+                    }
+                  );
+
+                } catch (
+                  error
+                ) {
+
+                  console.log(
+                    "❌ Members Error:",
+                    error?.message ||
+                    error
+                  );
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        "❌ Member count পাওয়া যায়নি।"
+                    }
+                  );
+
+                }
+
+                continue;
+
+              }
+
+              // ==========================================
+              // /ADMIN অথবা /ADMINS
+              // ==========================================
+
+              if (
+                command === "/admin" ||
+                command === "/admins"
+              ) {
+
+                try {
+
+                  const metadata =
+                    await sock.groupMetadata(
+                      remoteJid
+                    );
+
+                  const participants =
+                    Array.isArray(
+                      metadata?.participants
+                    )
+                      ? metadata.participants
+                      : [];
+
+                  // ----------------------------------------
+                  // ONLY GROUP ADMINS
+                  // ----------------------------------------
+
+                  const adminParticipants =
+                    participants.filter(
+                      participant =>
+                        participant?.admin === "admin" ||
+                        participant?.admin === "superadmin" ||
+                        participant?.admin === true
+                    );
+
+                  if (
+                    adminParticipants.length === 0
+                  ) {
+
+                    await sock.sendMessage(
+                      remoteJid,
+                      {
+                        text:
+                          "👑 এই গ্রুপে কোনো Admin পাওয়া যায়নি।"
+                      }
+                    );
+
+                    continue;
+
+                  }
+
+                  let adminText =
+                    "👑 *GROUP ADMINS*\n\n";
+
+                  const mentions = [];
+
+                  let number =
+                    1;
+
+                  // ----------------------------------------
+                  // ADMIN LIST
+                  // ----------------------------------------
+
+                  for (
+                    const admin
+                    of adminParticipants
+                  ) {
+
+                    const mentionData =
+                      getMentionData(
+                        admin,
+                        participants
+                      );
+
+                    let adminName =
+                      mentionData.name;
+
+                    const mentionJid =
+                      mentionData.jid;
+
+                    if (
+                      !adminName ||
+                      adminName ===
+                        "Unknown Member"
+                    ) {
+
+                      adminName =
+                        "Admin";
+
+                    }
+
+                    // --------------------------------------
+                    // CLICKABLE MENTION
+                    // --------------------------------------
+
+                    if (
+                      mentionJid
+                    ) {
+
+                      adminText +=
+                        `${number}️⃣ @${adminName}`;
+
+                      mentions.push(
+                        mentionJid
+                      );
+
+                    } else {
+
+                      // ------------------------------------
+                      // Name পাওয়া গেছে কিন্তু JID পাওয়া যায়নি
+                      // ------------------------------------
+
+                      adminText +=
+                        `${number}️⃣ ${adminName}`;
+
+                    }
+
+                    // --------------------------------------
+                    // ADMIN ROLE
+                    // --------------------------------------
+
+                    if (
+                      admin?.admin ===
+                      "superadmin"
+                    ) {
+
+                      adminText +=
+                        " ⭐ Group Owner";
+
+                    } else {
+
+                      adminText +=
+                        " 👑 Admin";
+
+                    }
+
+                    adminText +=
+                      "\n\n";
+
+                    number++;
+
+                  }
+
+                  adminText +=
+                    `👥 *মোট Admin: ${adminParticipants.length} জন*\n\n❤️ *Piyas*`;
+
+                  // ----------------------------------------
+                  // SEND ADMIN LIST
+                  // ----------------------------------------
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        adminText,
+
+                      mentions
+                    }
+                  );
+
+                  console.log(
+                    `👑 Admin list sent: ${adminParticipants.length} admins`
+                  );
+
+                } catch (
+                  error
+                ) {
+
+                  console.log("");
+                  console.log(
+                    "❌ Admin List Error:"
+                  );
+
+                  console.log(
+                    error?.message ||
+                    error
+                  );
+
+                  if (
+                    error?.stack
+                  ) {
+
+                    console.log(
+                      error.stack
+                    );
+
+                  }
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        "❌ Admin list পাওয়া যায়নি।"
+                    }
+                  );
+
+                }
+
+                continue;
+
+              }
+
+              // ==========================================
+              // /PIYAS
+              // ==========================================
+
+              if (
+                command === "/piyas"
+              ) {
+
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      PIYAS_INFO
+                  }
+                );
+
+                continue;
+
+              }
+
+              // ==========================================
+              // UNKNOWN COMMAND
+              // ==========================================
+
+              // Unknown command হলে কোনো reply হবে না.
+
+            } catch (
+              messageError
             ) {
 
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    PIYAS_INFO
-                }
+              console.log("");
+              console.log(
+                "❌ Individual Message Error:"
               );
 
-              continue;
+              console.log(
+                messageError?.message ||
+                messageError
+              );
+
+              console.log("");
 
             }
-
-            // ==========================================
-            // UNKNOWN COMMAND
-            // ==========================================
-
-            // কোনো অচেনা command হলে Bot কোনো reply করবে না.
 
           }
 
@@ -1753,16 +1994,6 @@ ${description}
             error?.message ||
             error
           );
-
-          if (
-            error?.stack
-          ) {
-
-            console.log(
-              error.stack
-            );
-
-          }
 
           console.log("");
 
@@ -1859,6 +2090,7 @@ process.on(
     );
 
     console.log(
+      "Error:",
       error?.message ||
       error
     );
