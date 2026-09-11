@@ -718,19 +718,24 @@ const MENU_TEXT = `
 ╭─❖ ⚙️ *UTILITY*
 │
 │ 8️⃣ /ping
-│ 9️⃣ /website
 │
 ╰────────────────────
 
 ╭─❖ 💰 *BUY / SELL*
 │
-│ 🔟 /deal /ডিল
+│ 9️⃣ /deal /ডিল
 │
 ╰────────────────────
 
 ╭─❖ 🤍 *PIYAS*
 │
-│ 1️⃣1️⃣ /piyas
+│ 🔟 /piyas
+│
+╰────────────────────
+
+╭─❖ 🌐 *🌐 Our Official Website*
+│
+│ 1️⃣1️⃣ /website
 │
 ╰────────────────────
 
