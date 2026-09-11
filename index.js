@@ -50,7 +50,9 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
+  console.log(
+    `🌐 Server running on port ${PORT}`
+  );
 });
 
 // ======================================================
@@ -174,18 +176,16 @@ const contactNames = new Map();
 // ======================================================
 
 function saveContacts(contacts = []) {
+  if (!Array.isArray(contacts)) {
+    return;
+  }
+
   for (const contact of contacts) {
     try {
-      if (!contact || typeof contact !== "object") {
-        continue;
-      }
-
-      const id =
-        typeof contact.id === "string"
-          ? contact.id
-          : null;
-
-      if (!id) {
+      if (
+        !contact ||
+        typeof contact !== "object"
+      ) {
         continue;
       }
 
@@ -198,37 +198,31 @@ function saveContacts(contacts = []) {
         null;
 
       if (
-        typeof name === "string" &&
-        name.trim()
+        typeof name !== "string" ||
+        !name.trim()
       ) {
-        contactNames.set(
-          id,
-          name.trim()
-        );
+        continue;
       }
 
-      // LID
-      if (
-        typeof contact.lid === "string" &&
-        typeof name === "string" &&
-        name.trim()
-      ) {
-        contactNames.set(
-          contact.lid,
-          name.trim()
-        );
-      }
+      const cleanName =
+        name.trim();
 
-      // Phone number
-      if (
-        typeof contact.phoneNumber === "string" &&
-        typeof name === "string" &&
-        name.trim()
-      ) {
-        contactNames.set(
-          contact.phoneNumber,
-          name.trim()
-        );
+      const ids = [
+        contact.id,
+        contact.lid,
+        contact.phoneNumber
+      ];
+
+      for (const id of ids) {
+        if (
+          typeof id === "string" &&
+          id.trim()
+        ) {
+          contactNames.set(
+            id,
+            cleanName
+          );
+        }
       }
 
     } catch (error) {
@@ -280,13 +274,16 @@ function getDisplayName(
     return "Unknown Member";
   }
 
+  // ------------------------------------------
+  // Check cache
+  // ------------------------------------------
+
   const possibleIds = [
     participant.id,
     participant.lid,
     participant.phoneNumber
   ];
 
-  // Cache check
   for (const id of possibleIds) {
     if (
       typeof id === "string" &&
@@ -304,7 +301,10 @@ function getDisplayName(
     }
   }
 
-  // Direct names
+  // ------------------------------------------
+  // Check direct names
+  // ------------------------------------------
+
   const possibleNames = [
     participant.username,
     participant.notify,
@@ -322,7 +322,10 @@ function getDisplayName(
     }
   }
 
-  // Phone JID
+  // ------------------------------------------
+  // Phone JID fallback
+  // ------------------------------------------
+
   const id =
     typeof participant.id === "string"
       ? participant.id
@@ -331,8 +334,7 @@ function getDisplayName(
   if (
     id.includes("@s.whatsapp.net")
   ) {
-    return id
-      .split("@")[0];
+    return id.split("@")[0];
   }
 
   return "Unknown Member";
@@ -422,28 +424,83 @@ function getMessageText(
 }
 
 // ======================================================
+// GET SAFE PHONE JID
+// ======================================================
+
+function getPhoneJid(
+  participant
+) {
+  if (
+    !participant ||
+    typeof participant !== "object"
+  ) {
+    return null;
+  }
+
+  // Already a WhatsApp JID
+  if (
+    typeof participant.phoneNumber === "string" &&
+    participant.phoneNumber.includes("@")
+  ) {
+    return participant.phoneNumber;
+  }
+
+  // Numeric phone number
+  if (
+    typeof participant.phoneNumber === "string"
+  ) {
+    const phone =
+      participant.phoneNumber.replace(
+        /[^0-9]/g,
+        ""
+      );
+
+    if (
+      phone.length >= 8
+    ) {
+      return `${phone}@s.whatsapp.net`;
+    }
+  }
+
+  // Participant ID
+  if (
+    typeof participant.id === "string" &&
+    participant.id.endsWith(
+      "@s.whatsapp.net"
+    )
+  ) {
+    return participant.id;
+  }
+
+  return null;
+}
+
+// ======================================================
 // RECONNECT CONTROL
 // ======================================================
 
 let reconnectTimer = null;
+
+let botStarting = false;
 
 function scheduleReconnect() {
   if (reconnectTimer) {
     return;
   }
 
-  reconnectTimer = setTimeout(
-    () => {
-      reconnectTimer = null;
+  reconnectTimer =
+    setTimeout(
+      () => {
+        reconnectTimer = null;
 
-      console.log(
-        "🔄 Restarting WhatsApp Bot..."
-      );
+        console.log(
+          "🔄 Restarting WhatsApp Bot..."
+        );
 
-      startBot();
-    },
-    5000
-  );
+        startBot();
+      },
+      5000
+    );
 }
 
 // ======================================================
@@ -451,39 +508,55 @@ function scheduleReconnect() {
 // ======================================================
 
 async function startBot() {
+  if (botStarting) {
+    return;
+  }
+
+  botStarting = true;
+
   try {
     console.log("");
-    console.log("==========================================");
-    console.log("🚀 WhatsApp Bot Starting...");
-    console.log("==========================================");
+    console.log(
+      "=========================================="
+    );
+    console.log(
+      "🚀 WhatsApp Bot Starting..."
+    );
+    console.log(
+      "=========================================="
+    );
 
     const {
       state,
       saveCreds
-    } = await useMultiFileAuthState(
-      AUTH_FOLDER
-    );
+    } =
+      await useMultiFileAuthState(
+        AUTH_FOLDER
+      );
 
-    const sock = makeWASocket({
-      auth: state,
+    const sock =
+      makeWASocket({
+        auth: state,
 
-      logger: P({
-        level: "silent"
-      }),
+        logger: P({
+          level: "silent"
+        }),
 
-      printQRInTerminal: false,
+        printQRInTerminal: false,
 
-      browser:
-        Browsers.ubuntu("Chrome"),
+        browser:
+          Browsers.ubuntu(
+            "Chrome"
+          ),
 
-      connectTimeoutMs: 60000,
+        connectTimeoutMs: 60000,
 
-      keepAliveIntervalMs: 25000,
+        keepAliveIntervalMs: 25000,
 
-      retryRequestDelayMs: 2000,
+        retryRequestDelayMs: 2000,
 
-      markOnlineOnConnect: true
-    });
+        markOnlineOnConnect: true
+      });
 
     // ==================================================
     // SAVE CREDENTIALS
@@ -501,49 +574,18 @@ async function startBot() {
     sock.ev.on(
       "contacts.upsert",
       contacts => {
-        saveContacts(contacts);
+        saveContacts(
+          contacts
+        );
       }
     );
 
     sock.ev.on(
       "contacts.update",
       contacts => {
-        saveContacts(contacts);
-      }
-    );
-
-    // ==================================================
-    // MESSAGE PUSH NAME
-    // ==================================================
-
-    sock.ev.on(
-      "messages.upsert",
-      ({ messages }) => {
-        try {
-          for (const message of messages || []) {
-            const sender =
-              message?.key?.participant ||
-              message?.key?.remoteJid;
-
-            const pushName =
-              message?.pushName;
-
-            if (
-              typeof sender === "string" &&
-              typeof pushName === "string"
-            ) {
-              savePushName(
-                sender,
-                pushName
-              );
-            }
-          }
-        } catch (error) {
-          console.log(
-            "⚠️ Push Name Error:",
-            error?.message || error
-          );
-        }
+        saveContacts(
+          contacts
+        );
       }
     );
 
@@ -552,7 +594,7 @@ async function startBot() {
     // ==================================================
 
     if (
-      !sock.authState?.creds?.registered &&
+      !state.creds.registered &&
       PHONE_NUMBER
     ) {
       setTimeout(
@@ -564,13 +606,19 @@ async function startBot() {
                 ""
               );
 
-            if (!cleanNumber) {
+            if (
+              !cleanNumber
+            ) {
               console.log(
                 "❌ Invalid PHONE_NUMBER"
               );
 
               return;
             }
+
+            console.log(
+              "🔐 Requesting pairing code..."
+            );
 
             const code =
               await sock.requestPairingCode(
@@ -597,13 +645,15 @@ async function startBot() {
               "=========================================="
             );
             console.log("");
+
           } catch (error) {
             console.log("");
             console.log(
               "❌ Pairing Code Error:"
             );
             console.log(
-              error?.message || error
+              error?.message ||
+              error
             );
             console.log("");
           }
@@ -618,18 +668,26 @@ async function startBot() {
 
     sock.ev.on(
       "connection.update",
-      async ({
+      ({
         connection,
         lastDisconnect
       }) => {
 
-        if (connection === "connecting") {
+        if (
+          connection ===
+          "connecting"
+        ) {
           console.log(
             "🔄 WhatsApp connecting..."
           );
         }
 
-        if (connection === "open") {
+        if (
+          connection ===
+          "open"
+        ) {
+          botStarting = false;
+
           console.log("");
           console.log(
             "=========================================="
@@ -643,7 +701,8 @@ async function startBot() {
 
           console.log(
             `🎯 Bot Group Restriction: ${
-              GROUP_ID || "ALL GROUPS"
+              GROUP_ID ||
+              "ALL GROUPS"
             }`
           );
 
@@ -657,15 +716,27 @@ async function startBot() {
           console.log("");
         }
 
-        if (connection === "close") {
+        if (
+          connection ===
+          "close"
+        ) {
+          botStarting = false;
+
           const statusCode =
             new Boom(
               lastDisconnect?.error
-            )?.output?.statusCode;
+            )?.output
+              ?.statusCode;
 
           console.log("");
           console.log(
+            "=========================================="
+          );
+          console.log(
             "❌ WhatsApp Connection Closed"
+          );
+          console.log(
+            "=========================================="
           );
 
           console.log(
@@ -704,12 +775,22 @@ async function startBot() {
     sock.ev.on(
       "group-participants.update",
       async update => {
+
         try {
+
+          // ----------------------------------------------
+          // ONLY ADD EVENT
+          // ----------------------------------------------
+
           if (
             update.action !== "add"
           ) {
             return;
           }
+
+          // ----------------------------------------------
+          // GROUP ID
+          // ----------------------------------------------
 
           const groupId =
             typeof update.id === "string"
@@ -720,7 +801,10 @@ async function startBot() {
             return;
           }
 
-          // Group restriction
+          // ----------------------------------------------
+          // GROUP RESTRICTION
+          // ----------------------------------------------
+
           if (
             GROUP_ID &&
             groupId !== GROUP_ID
@@ -728,7 +812,21 @@ async function startBot() {
             return;
           }
 
-          // Get fresh group metadata
+          console.log("");
+          console.log(
+            "=========================================="
+          );
+          console.log(
+            "🎉 NEW MEMBER EVENT"
+          );
+          console.log(
+            "=========================================="
+          );
+
+          // ----------------------------------------------
+          // GET GROUP METADATA
+          // ----------------------------------------------
+
           const metadata =
             await sock.groupMetadata(
               groupId
@@ -746,48 +844,88 @@ async function startBot() {
               ? metadata.participants
               : [];
 
-          // Loop new members
+          console.log(
+            `👥 Group: ${groupName}`
+          );
+
+          console.log(
+            `👤 New Members: ${
+              Array.isArray(
+                update.participants
+              )
+                ? update.participants.length
+                : 0
+            }`
+          );
+
+          // ----------------------------------------------
+          // PROCESS MEMBERS
+          // ----------------------------------------------
+
           for (
-            const participantData
+            const rawParticipant
             of update.participants || []
           ) {
+
             try {
 
               // =========================================
-              // GET PARTICIPANT ID SAFELY
+              // GET PARTICIPANT ID
               // =========================================
 
               let participantId =
-                participantData;
+                null;
 
-              // Baileys may provide an object
               if (
-                typeof participantData === "object" &&
-                participantData !== null
+                typeof rawParticipant ===
+                "string"
               ) {
                 participantId =
-                  participantData.id ||
-                  participantData.lid ||
-                  participantData.phoneNumber ||
-                  participantData.jid ||
-                  null;
+                  rawParticipant;
               }
 
-              // Must be string
+              else if (
+                rawParticipant &&
+                typeof rawParticipant ===
+                  "object"
+              ) {
+
+                participantId =
+                  typeof rawParticipant.id ===
+                  "string"
+                    ? rawParticipant.id
+                    : typeof rawParticipant.lid ===
+                      "string"
+                    ? rawParticipant.lid
+                    : typeof rawParticipant.phoneNumber ===
+                      "string"
+                    ? rawParticipant.phoneNumber
+                    : null;
+              }
+
               if (
-                typeof participantId !== "string" ||
+                typeof participantId !==
+                  "string" ||
                 !participantId
               ) {
+
                 console.log(
-                  "⚠️ Invalid participant ID:",
-                  participantData
+                  "⚠️ Invalid participant:"
+                );
+
+                console.log(
+                  JSON.stringify(
+                    rawParticipant,
+                    null,
+                    2
+                  )
                 );
 
                 continue;
               }
 
               // =========================================
-              // FIND FULL PARTICIPANT
+              // FIND PARTICIPANT
               // =========================================
 
               const participant =
@@ -797,29 +935,7 @@ async function startBot() {
                 );
 
               // =========================================
-              // ACTUAL ID
-              // =========================================
-
-              let actualId =
-                participant?.id ||
-                participant?.phoneNumber ||
-                participant?.lid ||
-                participantId;
-
-              if (
-                typeof actualId !== "string" ||
-                !actualId
-              ) {
-                console.log(
-                  "⚠️ Invalid actualId:",
-                  actualId
-                );
-
-                continue;
-              }
-
-              // =========================================
-              // GET MEMBER NAME
+              // GET NAME
               // =========================================
 
               let memberName =
@@ -829,30 +945,28 @@ async function startBot() {
                     )
                   : "Unknown Member";
 
-              // Check cache
+              // Cache fallback
               if (
                 !memberName ||
                 memberName ===
                   "Unknown Member"
               ) {
-                const cachedName =
-                  contactNames.get(
-                    actualId
-                  ) ||
+
+                const cached =
                   contactNames.get(
                     participantId
                   );
 
                 if (
-                  typeof cachedName === "string" &&
-                  cachedName.trim()
+                  typeof cached ===
+                    "string" &&
+                  cached.trim()
                 ) {
                   memberName =
-                    cachedName.trim();
+                    cached.trim();
                 }
               }
 
-              // Final fallback
               if (
                 !memberName ||
                 memberName ===
@@ -862,40 +976,59 @@ async function startBot() {
                   "New Member";
               }
 
-              // Force string
               memberName =
-                String(memberName);
-
-              actualId =
-                String(actualId);
-
-              const safeGroupName =
-                String(groupName);
-
-              // Save name
-              if (
-                memberName !==
-                "New Member"
-              ) {
-                contactNames.set(
-                  actualId,
+                String(
                   memberName
                 );
+
+              // =========================================
+              // SAVE NAME
+              // =========================================
+
+              if (
+                participant
+              ) {
+
+                const ids = [
+                  participant.id,
+                  participant.lid,
+                  participant.phoneNumber
+                ];
+
+                for (
+                  const id of ids
+                ) {
+                  if (
+                    typeof id ===
+                      "string" &&
+                    id.trim()
+                  ) {
+                    contactNames.set(
+                      id,
+                      memberName
+                    );
+                  }
+                }
               }
 
               // =========================================
               // CREATE WELCOME MESSAGE
               // =========================================
 
-              const mentionText =
+              const safeGroupName =
+                String(
+                  groupName
+                );
+
+              const displayMember =
                 `@${memberName}`;
 
-              const message =
+              const welcomeMessage =
                 String(
                   WELCOME
                     .replace(
                       "{member}",
-                      mentionText
+                      displayMember
                     )
                     .replace(
                       "{group}",
@@ -904,48 +1037,144 @@ async function startBot() {
                 );
 
               // =========================================
-              // SEND WELCOME + REAL MENTION
+              // TRY REAL MENTION ONLY WHEN SAFE
               // =========================================
 
-              await sock.sendMessage(
-                groupId,
-                {
-                  text: message,
+              let sent =
+                false;
 
-                  mentions: [
-                    actualId
-                  ]
+              const mentionJid =
+                getPhoneJid(
+                  participant
+                );
+
+              if (
+                typeof mentionJid ===
+                  "string" &&
+                mentionJid.endsWith(
+                  "@s.whatsapp.net"
+                )
+              ) {
+
+                try {
+
+                  console.log(
+                    "📢 Trying real mention:",
+                    mentionJid
+                  );
+
+                  await sock.sendMessage(
+                    groupId,
+                    {
+                      text:
+                        welcomeMessage,
+
+                      mentions: [
+                        mentionJid
+                      ]
+                    }
+                  );
+
+                  console.log(
+                    "✅ Welcome sent with real mention."
+                  );
+
+                  sent = true;
+
+                } catch (
+                  mentionError
+                ) {
+
+                  console.log(
+                    "⚠️ Real mention failed:"
+                  );
+
+                  console.log(
+                    mentionError?.message ||
+                    mentionError
+                  );
+
+                  console.log(
+                    "📨 Trying fallback without mention..."
+                  );
                 }
-              );
+              }
+
+              // =========================================
+              // FALLBACK WITHOUT MENTION
+              // =========================================
+
+              if (!sent) {
+
+                const fallbackMessage =
+                  String(
+                    WELCOME
+                      .replace(
+                        "{member}",
+                        memberName
+                      )
+                      .replace(
+                        "{group}",
+                        safeGroupName
+                      )
+                  );
+
+                await sock.sendMessage(
+                  groupId,
+                  {
+                    text:
+                      fallbackMessage
+                  }
+                );
+
+                console.log(
+                  "✅ Welcome sent without mention."
+                );
+
+                sent = true;
+              }
+
+              // =========================================
+              // SUCCESS LOG
+              // =========================================
 
               console.log("");
               console.log(
-                "=========================================="
+                "------------------------------------------"
               );
+
               console.log(
                 "🎉 NEW MEMBER JOINED"
               );
+
               console.log(
                 `👤 Name: ${memberName}`
               );
+
               console.log(
-                `🆔 ID: ${actualId}`
+                `🆔 Event ID: ${participantId}`
               );
+
               console.log(
                 `👥 Group: ${safeGroupName}`
               );
-              console.log(
-                `📢 Mention: @${memberName}`
-              );
-              console.log(
-                "✅ Welcome message sent."
-              );
-              console.log(
-                "=========================================="
-              );
-              console.log("");
 
-            } catch (memberError) {
+              console.log(
+                `📨 Status: ${
+                  sent
+                    ? "WELCOME SENT"
+                    : "FAILED"
+                }`
+              );
+
+              console.log(
+                "------------------------------------------"
+              );
+
+            } catch (
+              memberError
+            ) {
+
               console.log("");
               console.log(
                 "❌ Individual Welcome Error:"
@@ -956,11 +1185,29 @@ async function startBot() {
                 memberError
               );
 
+              if (
+                memberError?.stack
+              ) {
+                console.log(
+                  "📌 Error Stack:"
+                );
+
+                console.log(
+                  memberError.stack
+                );
+              }
+
               console.log("");
             }
           }
 
+          console.log(
+            "=========================================="
+          );
+          console.log("");
+
         } catch (error) {
+
           console.log("");
           console.log(
             "❌ Group Welcome Error:"
@@ -970,6 +1217,18 @@ async function startBot() {
             error?.message ||
             error
           );
+
+          if (
+            error?.stack
+          ) {
+            console.log(
+              "📌 Error Stack:"
+            );
+
+            console.log(
+              error.stack
+            );
+          }
 
           console.log("");
         }
@@ -989,11 +1248,17 @@ async function startBot() {
         try {
 
           for (
-            const msg of messages || []
+            const msg
+            of messages || []
           ) {
 
-            // Ignore invalid message
-            if (!msg?.message) {
+            // ------------------------------------------
+            // BASIC VALIDATION
+            // ------------------------------------------
+
+            if (
+              !msg?.message
+            ) {
               continue;
             }
 
@@ -1007,9 +1272,10 @@ async function startBot() {
             const remoteJid =
               msg.key?.remoteJid;
 
-            // Only group messages
+            // Only groups
             if (
-              typeof remoteJid !== "string" ||
+              typeof remoteJid !==
+                "string" ||
               !remoteJid.endsWith(
                 "@g.us"
               )
@@ -1020,10 +1286,15 @@ async function startBot() {
             // Group restriction
             if (
               GROUP_ID &&
-              remoteJid !== GROUP_ID
+              remoteJid !==
+                GROUP_ID
             ) {
               continue;
             }
+
+            // ------------------------------------------
+            // GET TEXT
+            // ------------------------------------------
 
             const text =
               getMessageText(
@@ -1034,13 +1305,11 @@ async function startBot() {
               continue;
             }
 
-            // ==========================================
-            // COMMAND
-            // ==========================================
-
             const command =
               text
-                .split(/\s+/)[0]
+                .split(
+                  /\s+/
+                )[0]
                 .toLowerCase();
 
             // ==========================================
@@ -1048,12 +1317,15 @@ async function startBot() {
             // ==========================================
 
             if (
-              command === "/menu"
+              command ===
+              "/menu"
             ) {
+
               await sock.sendMessage(
                 remoteJid,
                 {
-                  text: MENU
+                  text:
+                    MENU
                 }
               );
 
@@ -1065,12 +1337,15 @@ async function startBot() {
             // ==========================================
 
             if (
-              command === "/rules"
+              command ===
+              "/rules"
             ) {
+
               await sock.sendMessage(
                 remoteJid,
                 {
-                  text: RULES
+                  text:
+                    RULES
                 }
               );
 
@@ -1082,8 +1357,10 @@ async function startBot() {
             // ==========================================
 
             if (
-              command === "/website"
+              command ===
+              "/website"
             ) {
+
               await sock.sendMessage(
                 remoteJid,
                 {
@@ -1100,19 +1377,20 @@ async function startBot() {
             // ==========================================
 
             if (
-              command === "/ping"
+              command ===
+              "/ping"
             ) {
+
               const start =
                 Date.now();
 
-              const sent =
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      "🏓 Checking Bot..."
-                  }
-                );
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text:
+                    "🏓 Checking Bot..."
+                }
+              );
 
               const ping =
                 Date.now() -
@@ -1123,9 +1401,6 @@ async function startBot() {
                 {
                   text:
                     `🏓 *PONG!*\n\n🟢 Bot Status: ONLINE\n⚡ Response: ${ping}ms\n🤖 WhatsApp Bot is working perfectly.`
-                },
-                {
-                  quoted: sent
                 }
               );
 
@@ -1137,13 +1412,15 @@ async function startBot() {
             // ==========================================
 
             if (
-              command === "/id"
+              command ===
+              "/id"
             ) {
+
               await sock.sendMessage(
                 remoteJid,
                 {
                   text:
-                    `🆔 *Group ID*\n\n\`${remoteJid}\``
+                    `🆔 *Group ID*\n\n${remoteJid}`
                 }
               );
 
@@ -1155,7 +1432,8 @@ async function startBot() {
             // ==========================================
 
             if (
-              command === "/groupinfo"
+              command ===
+              "/groupinfo"
             ) {
 
               try {
@@ -1166,8 +1444,11 @@ async function startBot() {
                   );
 
                 const participants =
-                  metadata?.participants ||
-                  [];
+                  Array.isArray(
+                    metadata?.participants
+                  )
+                    ? metadata.participants
+                    : [];
 
                 const admins =
                   participants.filter(
@@ -1175,17 +1456,23 @@ async function startBot() {
                       participant?.admin
                   );
 
-                const owner =
-                  metadata?.owner ||
-                  "Unknown";
-
                 const subject =
-                  metadata?.subject ||
-                  "Unknown Group";
+                  typeof metadata?.subject ===
+                    "string"
+                    ? metadata.subject
+                    : "Unknown Group";
 
-                const desc =
-                  metadata?.desc ||
-                  "No description";
+                const description =
+                  typeof metadata?.desc ===
+                    "string"
+                    ? metadata.desc
+                    : "No description";
+
+                const owner =
+                  typeof metadata?.owner ===
+                    "string"
+                    ? metadata.owner
+                    : "Unknown";
 
                 const info = `
 👥 *GROUP INFORMATION*
@@ -1206,17 +1493,26 @@ ${remoteJid}
 ${owner}
 
 📝 Description:
-${desc}
+${description}
 `;
 
                 await sock.sendMessage(
                   remoteJid,
                   {
-                    text: info
+                    text:
+                      info
                   }
                 );
 
-              } catch (error) {
+              } catch (
+                error
+              ) {
+
+                console.log(
+                  "❌ GroupInfo Error:",
+                  error?.message ||
+                  error
+                );
 
                 await sock.sendMessage(
                   remoteJid,
@@ -1224,12 +1520,6 @@ ${desc}
                     text:
                       "❌ Group information পাওয়া যায়নি।"
                   }
-                );
-
-                console.log(
-                  "❌ GroupInfo Error:",
-                  error?.message ||
-                    error
                 );
               }
 
@@ -1241,7 +1531,8 @@ ${desc}
             // ==========================================
 
             if (
-              command === "/members"
+              command ===
+              "/members"
             ) {
 
               try {
@@ -1252,8 +1543,11 @@ ${desc}
                   );
 
                 const count =
-                  metadata?.participants
-                    ?.length || 0;
+                  Array.isArray(
+                    metadata?.participants
+                  )
+                    ? metadata.participants.length
+                    : 0;
 
                 await sock.sendMessage(
                   remoteJid,
@@ -1263,7 +1557,15 @@ ${desc}
                   }
                 );
 
-              } catch (error) {
+              } catch (
+                error
+              ) {
+
+                console.log(
+                  "❌ Members Error:",
+                  error?.message ||
+                  error
+                );
 
                 await sock.sendMessage(
                   remoteJid,
@@ -1271,12 +1573,6 @@ ${desc}
                     text:
                       "❌ Member count পাওয়া যায়নি।"
                   }
-                );
-
-                console.log(
-                  "❌ Members Error:",
-                  error?.message ||
-                    error
                 );
               }
 
@@ -1288,7 +1584,8 @@ ${desc}
             // ==========================================
 
             if (
-              command === "/users"
+              command ===
+              "/users"
             ) {
 
               try {
@@ -1299,12 +1596,16 @@ ${desc}
                   );
 
                 const participants =
-                  metadata?.participants ||
-                  [];
+                  Array.isArray(
+                    metadata?.participants
+                  )
+                    ? metadata.participants
+                    : [];
 
                 if (
                   participants.length === 0
                 ) {
+
                   await sock.sendMessage(
                     remoteJid,
                     {
@@ -1328,11 +1629,15 @@ ${desc}
                   of participants
                 ) {
 
-                  let id =
-                    participant?.id;
+                  // Only valid WhatsApp JID
+                  const id =
+                    typeof participant?.id ===
+                      "string"
+                      ? participant.id
+                      : null;
 
                   if (
-                    typeof id !== "string"
+                    !id
                   ) {
                     continue;
                   }
@@ -1357,28 +1662,84 @@ ${desc}
                   userList +=
                     `${number}️⃣ @${name}\n`;
 
-                  mentions.push(id);
+                  // Only add safe JID
+                  if (
+                    id.endsWith(
+                      "@s.whatsapp.net"
+                    )
+                  ) {
+                    mentions.push(
+                      id
+                    );
+                  }
 
                   number++;
                 }
 
                 userList +=
-                  `\n👥 Total: ${mentions.length}`;
+                  `\n👥 Total: ${participants.length}`;
 
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text: userList,
-                    mentions
+                // ----------------------------------------
+                // If safe mentions available
+                // ----------------------------------------
+
+                if (
+                  mentions.length > 0
+                ) {
+
+                  try {
+
+                    await sock.sendMessage(
+                      remoteJid,
+                      {
+                        text:
+                          userList,
+
+                        mentions
+                      }
+                    );
+
+                  } catch (
+                    mentionError
+                  ) {
+
+                    console.log(
+                      "⚠️ /users mention failed:"
+                    );
+
+                    console.log(
+                      mentionError?.message ||
+                      mentionError
+                    );
+
+                    await sock.sendMessage(
+                      remoteJid,
+                      {
+                        text:
+                          userList
+                      }
+                    );
                   }
-                );
 
-              } catch (error) {
+                } else {
+
+                  await sock.sendMessage(
+                    remoteJid,
+                    {
+                      text:
+                        userList
+                    }
+                  );
+                }
+
+              } catch (
+                error
+              ) {
 
                 console.log(
                   "❌ Users Error:",
                   error?.message ||
-                    error
+                  error
                 );
 
                 await sock.sendMessage(
@@ -1392,10 +1753,11 @@ ${desc}
 
               continue;
             }
-
           }
 
-        } catch (error) {
+        } catch (
+          error
+        ) {
 
           console.log("");
           console.log(
@@ -1408,19 +1770,24 @@ ${desc}
           );
 
           console.log("");
+
         }
       }
     );
 
     // ==================================================
-    // BOT READY
+    // BOT STARTED
     // ==================================================
 
     console.log(
       "📡 WhatsApp connecting..."
     );
 
-  } catch (error) {
+  } catch (
+    error
+  ) {
+
+    botStarting = false;
 
     console.log("");
     console.log(
@@ -1431,6 +1798,14 @@ ${desc}
       error?.message ||
       error
     );
+
+    if (
+      error?.stack
+    ) {
+      console.log(
+        error.stack
+      );
+    }
 
     console.log(
       "🔄 Retrying in 5 seconds..."
@@ -1447,6 +1822,7 @@ ${desc}
 process.on(
   "uncaughtException",
   error => {
+
     console.log("");
     console.log(
       "❌ Uncaught Exception:"
@@ -1457,6 +1833,14 @@ process.on(
       error
     );
 
+    if (
+      error?.stack
+    ) {
+      console.log(
+        error.stack
+      );
+    }
+
     console.log("");
   }
 );
@@ -1464,6 +1848,7 @@ process.on(
 process.on(
   "unhandledRejection",
   error => {
+
     console.log("");
     console.log(
       "❌ Unhandled Rejection:"
@@ -1473,6 +1858,14 @@ process.on(
       error?.message ||
       error
     );
+
+    if (
+      error?.stack
+    ) {
+      console.log(
+        error.stack
+      );
+    }
 
     console.log("");
   }
@@ -1485,6 +1878,7 @@ process.on(
 process.on(
   "SIGINT",
   () => {
+
     console.log(
       "🛑 Bot shutting down..."
     );
@@ -1496,6 +1890,7 @@ process.on(
 process.on(
   "SIGTERM",
   () => {
+
     console.log(
       "🛑 Bot shutting down..."
     );
