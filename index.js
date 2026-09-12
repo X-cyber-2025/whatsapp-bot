@@ -46,7 +46,6 @@ const logger = P({
 
 /* =========================================================
    BOT STATUS
-   প্রতি গ্রুপের ON/OFF আলাদা থাকবে
 ========================================================= */
 
 let botStatus = {};
@@ -58,18 +57,14 @@ function loadBotStatus() {
       return;
     }
 
-    const data =
-      fs.readFileSync(
-        BOT_STATUS_FILE,
-        "utf8"
-      );
-
-    botStatus =
-      JSON.parse(data) || {};
-
-    console.log(
-      "📂 Bot status loaded."
+    const data = fs.readFileSync(
+      BOT_STATUS_FILE,
+      "utf8"
     );
+
+    botStatus = JSON.parse(data) || {};
+
+    console.log("📂 Bot status loaded.");
 
   } catch (error) {
     console.log(
@@ -85,11 +80,7 @@ function saveBotStatus() {
   try {
     fs.writeFileSync(
       BOT_STATUS_FILE,
-      JSON.stringify(
-        botStatus,
-        null,
-        2
-      ),
+      JSON.stringify(botStatus, null, 2),
       "utf8"
     );
   } catch (error) {
@@ -101,19 +92,11 @@ function saveBotStatus() {
 }
 
 function isBotEnabled(groupId) {
-  /*
-   * নতুন কোনো গ্রুপের জন্য default = ON
-   */
   return botStatus[groupId] !== false;
 }
 
-function setBotStatus(
-  groupId,
-  enabled
-) {
-  botStatus[groupId] =
-    Boolean(enabled);
-
+function setBotStatus(groupId, enabled) {
+  botStatus[groupId] = Boolean(enabled);
   saveBotStatus();
 }
 
@@ -154,14 +137,11 @@ const server = http.createServer((req, res) => {
   );
 });
 
-server.listen(
-  PORT,
-  () => {
-    console.log(
-      `🌐 Server running on port ${PORT}`
-    );
-  }
-);
+server.listen(PORT, () => {
+  console.log(
+    `🌐 Server running on port ${PORT}`
+  );
+});
 
 /* =========================================================
    PAIRING NUMBER MEMORY
@@ -195,9 +175,7 @@ function readSavedPairingNumber() {
   }
 }
 
-function savePairingNumber(
-  number
-) {
+function savePairingNumber(number) {
   try {
     fs.writeFileSync(
       PAIRING_NUMBER_FILE,
@@ -212,11 +190,8 @@ function savePairingNumber(
   }
 }
 
-function getCredentialPhoneNumber(
-  creds
-) {
-  const id =
-    creds?.me?.id;
+function getCredentialPhoneNumber(creds) {
+  const id = creds?.me?.id;
 
   if (
     !id ||
@@ -277,9 +252,7 @@ function normalizeJid(jid) {
 function isPhoneJid(jid) {
   return (
     typeof jid === "string" &&
-    jid.endsWith(
-      "@s.whatsapp.net"
-    )
+    jid.endsWith("@s.whatsapp.net")
   );
 }
 
@@ -290,9 +263,7 @@ function isLidJid(jid) {
   );
 }
 
-function phoneNumberToJid(
-  phone
-) {
+function phoneNumberToJid(phone) {
   if (!phone) {
     return null;
   }
@@ -328,25 +299,17 @@ function cleanName(name) {
 
   const value =
     String(name)
-      .replace(
-        /\s+/g,
-        " "
-      )
+      .replace(/\s+/g, " ")
       .trim();
 
   if (!value) {
     return null;
   }
 
-  return value.slice(
-    0,
-    80
-  );
+  return value.slice(0, 80);
 }
 
-function getDisplayName(
-  participant = {}
-) {
+function getDisplayName(participant = {}) {
   const ids = [
     participant.id,
     participant.lid,
@@ -416,10 +379,7 @@ function getDisplayName(
    LID ↔ PHONE MAPPING
 ========================================================= */
 
-function saveLidMapping(
-  lid,
-  pn
-) {
+function saveLidMapping(lid, pn) {
   const lidJid =
     normalizeJid(lid);
 
@@ -458,9 +418,7 @@ function saveLidMapping(
   );
 }
 
-async function resolveLidToPhoneJid(
-  lid
-) {
+async function resolveLidToPhoneJid(lid) {
   if (!lid) {
     return null;
   }
@@ -531,9 +489,7 @@ async function resolveLidToPhoneJid(
    CONTACT CACHE
 ========================================================= */
 
-function saveContacts(
-  contacts = []
-) {
+function saveContacts(contacts = []) {
   for (
     const contact of contacts
   ) {
@@ -652,9 +608,7 @@ function saveContacts(
    PHONE JID
 ========================================================= */
 
-function getDirectPhoneJid(
-  participant = {}
-) {
+function getDirectPhoneJid(participant = {}) {
   if (
     participant.phoneNumber
   ) {
@@ -683,9 +637,7 @@ function getDirectPhoneJid(
   return null;
 }
 
-async function getPhoneJid(
-  participant = {}
-) {
+async function getPhoneJid(participant = {}) {
   const direct =
     getDirectPhoneJid(
       participant
@@ -868,9 +820,7 @@ function isOwnerParticipant(
   );
 }
 
-function isGroupAllowed(
-  jid
-) {
+function isGroupAllowed(jid) {
   if (
     !jid ||
     !jid.endsWith("@g.us")
@@ -904,7 +854,6 @@ function findParticipant(
 
 /* =========================================================
    ADMIN CHECK
-   শুধু Group Admin + Owner
 ========================================================= */
 
 async function isSenderAdmin(
@@ -981,12 +930,213 @@ async function isSenderAdmin(
 }
 
 /* =========================================================
+   ADMIN DATA
+   Group Owner + সকল Admin
+   LID → Phone JID
+========================================================= */
+
+async function getAdminData(remoteJid) {
+  try {
+    if (!sock) {
+      return {
+        admins: [],
+        result: []
+      };
+    }
+
+    const metadata =
+      await sock.groupMetadata(
+        remoteJid
+      );
+
+    const participants =
+      metadata?.participants || [];
+
+    await cacheParticipants(
+      participants
+    );
+
+    const adminParticipants =
+      participants.filter(
+        participant =>
+          isAdminParticipant(
+            participant
+          )
+      );
+
+    const result = [];
+    const usedJids = new Set();
+
+    for (
+      const participant of adminParticipants
+    ) {
+      if (!participant) {
+        continue;
+      }
+
+      let phoneJid =
+        await getPhoneJid(
+          participant
+        );
+
+      if (
+        !phoneJid &&
+        participant.phoneNumber
+      ) {
+        phoneJid =
+          phoneNumberToJid(
+            participant.phoneNumber
+          );
+      }
+
+      if (
+        !phoneJid &&
+        isPhoneJid(
+          participant.id
+        )
+      ) {
+        phoneJid =
+          participant.id;
+      }
+
+      if (
+        !phoneJid &&
+        isLidJid(
+          participant.id
+        )
+      ) {
+        phoneJid =
+          await resolveLidToPhoneJid(
+            participant.id
+          );
+      }
+
+      if (
+        !phoneJid &&
+        isLidJid(
+          participant.lid
+        )
+      ) {
+        phoneJid =
+          await resolveLidToPhoneJid(
+            participant.lid
+          );
+      }
+
+      let name =
+        getDisplayName(
+          participant
+        );
+
+      if (
+        !name ||
+        name === "Member"
+      ) {
+        name = "Admin";
+      }
+
+      name = String(name)
+        .replace(
+          /@/g,
+          ""
+        )
+        .trim();
+
+      if (phoneJid) {
+        if (participant.id) {
+          contactPhoneJids.set(
+            participant.id,
+            phoneJid
+          );
+        }
+
+        if (participant.lid) {
+          contactPhoneJids.set(
+            participant.lid,
+            phoneJid
+          );
+        }
+
+        if (
+          isLidJid(
+            participant.id
+          )
+        ) {
+          saveLidMapping(
+            participant.id,
+            phoneJid
+          );
+        }
+
+        if (
+          isLidJid(
+            participant.lid
+          )
+        ) {
+          saveLidMapping(
+            participant.lid,
+            phoneJid
+          );
+        }
+      }
+
+      /*
+       * একই Phone JID duplicate হলে বাদ
+       */
+      if (
+        phoneJid &&
+        usedJids.has(
+          phoneJid
+        )
+      ) {
+        continue;
+      }
+
+      if (phoneJid) {
+        usedJids.add(
+          phoneJid
+        );
+      }
+
+      result.push({
+        jid:
+          phoneJid ||
+          participant.id ||
+          participant.lid ||
+          null,
+
+        name,
+
+        owner:
+          isOwnerParticipant(
+            participant
+          )
+      });
+    }
+
+    return {
+      admins: result,
+      result
+    };
+
+  } catch (error) {
+    console.log(
+      "❌ getAdminData error:",
+      error?.message
+    );
+
+    return {
+      admins: [],
+      result: []
+    };
+  }
+}
+
+/* =========================================================
    MESSAGE
 ========================================================= */
 
-function getMessageText(
-  message
-) {
+function getMessageText(message) {
   const msg =
     message?.message;
 
@@ -1120,9 +1270,7 @@ Google Play Points এবং
    WELCOME
 ========================================================= */
 
-function getWelcomeText(
-  name
-) {
+function getWelcomeText(name) {
   return `
 ╭━━━━━━━━━━━━━━━━━━━━╮
         🎉 *স্বাগতম*
@@ -1268,9 +1416,7 @@ const BOT_ALREADY_ON_TEXT = `
    DEAL MESSAGE
 ========================================================= */
 
-async function sendDealNotice(
-  remoteJid
-) {
+async function sendDealNotice(remoteJid) {
   try {
     if (!sock) {
       return;
@@ -1300,8 +1446,7 @@ async function sendDealNotice(
 
     const lines = [];
     const mentions = [];
-    const usedJids =
-      new Set();
+    const usedJids = new Set();
 
     let number = 1;
 
@@ -1327,9 +1472,18 @@ async function sendDealNotice(
         usedJids.add(jid);
         mentions.push(jid);
 
+        const phone =
+          jid
+            .split("@")[0]
+            .replace(
+              /[^0-9]/g,
+              ""
+            );
+
         lines.push(
-          `${number}️⃣ @${name} ${role}`
+          `${number}️⃣ @${phone} ${role}`
         );
+
       } else {
         lines.push(
           `${number}️⃣ ${name} ${role}`
@@ -1349,9 +1503,12 @@ async function sendDealNotice(
       remoteJid,
       {
         text,
+
         mentions: [
           ...new Set(
-            mentions
+            mentions.filter(
+              isPhoneJid
+            )
           )
         ]
       }
@@ -1393,11 +1550,6 @@ async function sendWelcome(
     if (!sock) {
       return;
     }
-
-    /*
-     * Bot OFF থাকলেও নতুন Member welcome
-     * পাঠাবে না।
-     */
 
     if (
       !isBotEnabled(groupId)
@@ -1505,9 +1657,7 @@ async function sendWelcome(
    LID MAPPING EVENT
 ========================================================= */
 
-function handleLidMappingUpdate(
-  mapping
-) {
+function handleLidMappingUpdate(mapping) {
   try {
     if (!mapping) {
       return;
@@ -1564,9 +1714,7 @@ function handleLidMappingUpdate(
    PAIRING CODE
 ========================================================= */
 
-async function generatePairingCode(
-  state
-) {
+async function generatePairingCode(state) {
   try {
     if (!PHONE_NUMBER) {
       console.log(
@@ -1911,10 +2059,6 @@ async function startBot() {
             lastDisconnect
           } = update;
 
-          /* ===============================================
-             CONNECTING
-          =============================================== */
-
           if (
             connection ===
             "connecting"
@@ -1932,10 +2076,6 @@ async function startBot() {
               );
             }
           }
-
-          /* ===============================================
-             OPEN
-          =============================================== */
 
           if (
             connection === "open"
@@ -1982,10 +2122,6 @@ async function startBot() {
 
             return;
           }
-
-          /* ===============================================
-             CLOSE
-          =============================================== */
 
           if (
             connection === "close"
@@ -2102,10 +2238,7 @@ async function startBot() {
               .toLowerCase();
 
           /* ===============================================
-             BOT OFF / ON
-             
-             এই দুই কমান্ড সবসময় আগে চেক হবে,
-             যাতে Bot OFF থাকলেও Admin Bot ON করতে পারে।
+             BOT OFF
           =============================================== */
 
           if (
@@ -2118,9 +2251,6 @@ async function startBot() {
               );
 
             if (!admin) {
-              /*
-               * সাধারণ Member হলে কোনো response নয়।
-               */
               return;
             }
 
@@ -2160,6 +2290,10 @@ async function startBot() {
             return;
           }
 
+          /* ===============================================
+             BOT ON
+          =============================================== */
+
           if (
             command === "/botone"
           ) {
@@ -2170,9 +2304,6 @@ async function startBot() {
               );
 
             if (!admin) {
-              /*
-               * সাধারণ Member হলে কোনো response নয়।
-               */
               return;
             }
 
@@ -2213,8 +2344,7 @@ async function startBot() {
           }
 
           /* ===============================================
-             BOT OFF হলে এখান থেকে অন্য কোনো
-             command কাজ করবে না।
+             BOT OFF হলে অন্য command বন্ধ
           =============================================== */
 
           if (
@@ -2464,93 +2594,153 @@ async function startBot() {
 
           /* ===============================================
              ADMIN
+             
+             Group Owner + সকল Admin
+             @PhoneNumber = Real WhatsApp Mention
           =============================================== */
 
           if (
             command === "/admin"
           ) {
-            const {
-              admins,
-              result
-            } =
-              await getAdminData(
-                remoteJid
-              );
-
-            if (!admins.length) {
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    "👑 এই গ্রুপে কোনো Admin পাওয়া যায়নি।"
-                }
-              );
-
-              return;
-            }
-
-            const lines = [];
-            const mentions = [];
-            const usedJids =
-              new Set();
-
-            let number = 1;
-
-            for (
-              const admin of result
-            ) {
-              const name =
-                admin.name ||
-                "Admin";
-
-              const jid =
-                admin.jid;
-
-              const role =
-                admin.owner
-                  ? "⭐ *Group Owner*"
-                  : "👑 *Admin*";
+            try {
+              const {
+                admins,
+                result
+              } =
+                await getAdminData(
+                  remoteJid
+                );
 
               if (
-                isPhoneJid(jid) &&
-                !usedJids.has(jid)
+                !admins.length
               ) {
-                usedJids.add(jid);
-                mentions.push(jid);
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      "👑 এই গ্রুপে কোনো Admin পাওয়া যায়নি।"
+                  }
+                );
 
-                lines.push(
-                  `${number}️⃣ @${name} ${role}`
-                );
-              } else {
-                lines.push(
-                  `${number}️⃣ ${name} ${role}`
-                );
+                return;
               }
 
-              number++;
-            }
+              const lines = [];
+              const mentions = [];
+              const usedMentions =
+                new Set();
 
-            await sock.sendMessage(
-              remoteJid,
-              {
-                text: `
+              let number = 1;
+
+              for (
+                const admin of result
+              ) {
+                const jid =
+                  admin.jid;
+
+                const role =
+                  admin.owner
+                    ? "⭐ *Group Owner*"
+                    : "👑 *Admin*";
+
+                /*
+                 * Phone JID থাকলে
+                 * আসল WhatsApp clickable mention
+                 */
+                if (
+                  isPhoneJid(jid) &&
+                  !usedMentions.has(jid)
+                ) {
+                  usedMentions.add(
+                    jid
+                  );
+
+                  mentions.push(
+                    jid
+                  );
+
+                  const phone =
+                    jid
+                      .split("@")[0]
+                      .replace(
+                        /[^0-9]/g,
+                        ""
+                      );
+
+                  lines.push(
+                    `${number}️⃣ @${phone} ${role}`
+                  );
+
+                } else {
+                  const safeName =
+                    admin.name ||
+                    "Admin";
+
+                  lines.push(
+                    `${number}️⃣ ${safeName} ${role}`
+                  );
+                }
+
+                number++;
+              }
+
+              const adminText = `
 ╭━━━━━━━━━━━━━━━━━━━━╮
        👑 *GROUP ADMINS*
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
 ${lines.join("\n\n")}
 
+━━━━━━━━━━━━━━━━━━━━
+
 👥 *মোট Admin:* ${admins.length} জন
 
 🤍 *Piyas*
-`,
-                mentions: [
-                  ...new Set(
-                    mentions
-                  )
-                ]
-              }
-            );
+`;
+
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text:
+                    adminText,
+
+                  /*
+                   * শুধু Phone JID যাবে।
+                   * LID সরাসরি mentions-এ যাবে না।
+                   */
+                  mentions: [
+                    ...new Set(
+                      mentions.filter(
+                        jid =>
+                          isPhoneJid(
+                            jid
+                          )
+                      )
+                    )
+                  ]
+                }
+              );
+
+              console.log(
+                `👑 /admin sent | Total: ${admins.length} | Clickable mentions: ${mentions.length}`
+              );
+
+            } catch (error) {
+              console.log(
+                "❌ /admin error:",
+                error?.message
+              );
+
+              try {
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      "⚠️ Admin list আনতে সমস্যা হয়েছে। আবার /admin লিখে চেষ্টা করুন।"
+                  }
+                );
+              } catch {}
+            }
 
             return;
           }
