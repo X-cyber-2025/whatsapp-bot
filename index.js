@@ -30,6 +30,7 @@ const WEBSITE_URL =
 
 const AUTH_DIR = "./auth_info";
 const PAIRING_NUMBER_FILE = "./pairing_number.txt";
+const BOT_STATUS_FILE = "./bot_status.json";
 
 let sock = null;
 let reconnecting = false;
@@ -44,13 +45,89 @@ const logger = P({
 });
 
 /* =========================================================
+   BOT STATUS
+   প্রতি গ্রুপের ON/OFF আলাদা থাকবে
+========================================================= */
+
+let botStatus = {};
+
+function loadBotStatus() {
+  try {
+    if (!fs.existsSync(BOT_STATUS_FILE)) {
+      botStatus = {};
+      return;
+    }
+
+    const data =
+      fs.readFileSync(
+        BOT_STATUS_FILE,
+        "utf8"
+      );
+
+    botStatus =
+      JSON.parse(data) || {};
+
+    console.log(
+      "📂 Bot status loaded."
+    );
+
+  } catch (error) {
+    console.log(
+      "⚠️ Bot status load error:",
+      error?.message
+    );
+
+    botStatus = {};
+  }
+}
+
+function saveBotStatus() {
+  try {
+    fs.writeFileSync(
+      BOT_STATUS_FILE,
+      JSON.stringify(
+        botStatus,
+        null,
+        2
+      ),
+      "utf8"
+    );
+  } catch (error) {
+    console.log(
+      "⚠️ Bot status save error:",
+      error?.message
+    );
+  }
+}
+
+function isBotEnabled(groupId) {
+  /*
+   * নতুন কোনো গ্রুপের জন্য default = ON
+   */
+  return botStatus[groupId] !== false;
+}
+
+function setBotStatus(
+  groupId,
+  enabled
+) {
+  botStatus[groupId] =
+    Boolean(enabled);
+
+  saveBotStatus();
+}
+
+loadBotStatus();
+
+/* =========================================================
    HTTP SERVER
 ========================================================= */
 
 const server = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, {
-      "Content-Type": "application/json; charset=utf-8"
+      "Content-Type":
+        "application/json; charset=utf-8"
     });
 
     res.end(
@@ -58,7 +135,9 @@ const server = http.createServer((req, res) => {
         status: "online",
         bot: "WhatsApp Group Bot",
         connected: !!sock,
-        groups: GROUP_IDS.length || "ALL"
+        groups:
+          GROUP_IDS.length ||
+          "ALL"
       })
     );
 
@@ -66,15 +145,23 @@ const server = http.createServer((req, res) => {
   }
 
   res.writeHead(200, {
-    "Content-Type": "text/plain; charset=utf-8"
+    "Content-Type":
+      "text/plain; charset=utf-8"
   });
 
-  res.end("WhatsApp Bot is running!");
+  res.end(
+    "WhatsApp Bot is running!"
+  );
 });
 
-server.listen(PORT, () => {
-  console.log(`🌐 Server running on port ${PORT}`);
-});
+server.listen(
+  PORT,
+  () => {
+    console.log(
+      `🌐 Server running on port ${PORT}`
+    );
+  }
+);
 
 /* =========================================================
    PAIRING NUMBER MEMORY
@@ -82,14 +169,22 @@ server.listen(PORT, () => {
 
 function readSavedPairingNumber() {
   try {
-    if (!fs.existsSync(PAIRING_NUMBER_FILE)) {
+    if (
+      !fs.existsSync(
+        PAIRING_NUMBER_FILE
+      )
+    ) {
       return "";
     }
 
     return fs
-      .readFileSync(PAIRING_NUMBER_FILE, "utf8")
+      .readFileSync(
+        PAIRING_NUMBER_FILE,
+        "utf8"
+      )
       .trim()
       .replace(/[^0-9]/g, "");
+
   } catch (error) {
     console.log(
       "⚠️ Pairing number read error:",
@@ -100,7 +195,9 @@ function readSavedPairingNumber() {
   }
 }
 
-function savePairingNumber(number) {
+function savePairingNumber(
+  number
+) {
   try {
     fs.writeFileSync(
       PAIRING_NUMBER_FILE,
@@ -115,10 +212,16 @@ function savePairingNumber(number) {
   }
 }
 
-function getCredentialPhoneNumber(creds) {
-  const id = creds?.me?.id;
+function getCredentialPhoneNumber(
+  creds
+) {
+  const id =
+    creds?.me?.id;
 
-  if (!id || typeof id !== "string") {
+  if (
+    !id ||
+    typeof id !== "string"
+  ) {
     return "";
   }
 
@@ -130,7 +233,11 @@ function getCredentialPhoneNumber(creds) {
 
 async function resetAuthForNumberChange() {
   try {
-    if (fs.existsSync(AUTH_DIR)) {
+    if (
+      fs.existsSync(
+        AUTH_DIR
+      )
+    ) {
       await fs.promises.rm(
         AUTH_DIR,
         {
@@ -143,6 +250,7 @@ async function resetAuthForNumberChange() {
         "🗑️ Old WhatsApp session removed."
       );
     }
+
   } catch (error) {
     console.log(
       "❌ Failed to remove old session:",
@@ -156,7 +264,10 @@ async function resetAuthForNumberChange() {
 ========================================================= */
 
 function normalizeJid(jid) {
-  if (!jid || typeof jid !== "string") {
+  if (
+    !jid ||
+    typeof jid !== "string"
+  ) {
     return null;
   }
 
@@ -166,7 +277,9 @@ function normalizeJid(jid) {
 function isPhoneJid(jid) {
   return (
     typeof jid === "string" &&
-    jid.endsWith("@s.whatsapp.net")
+    jid.endsWith(
+      "@s.whatsapp.net"
+    )
   );
 }
 
@@ -177,16 +290,27 @@ function isLidJid(jid) {
   );
 }
 
-function phoneNumberToJid(phone) {
+function phoneNumberToJid(
+  phone
+) {
   if (!phone) {
     return null;
   }
 
-  const number = String(phone)
-    .replace(/@s.whatsapp.net/g, "")
-    .replace(/[^0-9]/g, "");
+  const number =
+    String(phone)
+      .replace(
+        /@s.whatsapp.net/g,
+        ""
+      )
+      .replace(
+        /[^0-9]/g,
+        ""
+      );
 
-  if (number.length < 8) {
+  if (
+    number.length < 8
+  ) {
     return null;
   }
 
@@ -202,50 +326,72 @@ function cleanName(name) {
     return null;
   }
 
-  const value = String(name)
-    .replace(/\s+/g, " ")
-    .trim();
+  const value =
+    String(name)
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim();
 
   if (!value) {
     return null;
   }
 
-  return value.slice(0, 80);
+  return value.slice(
+    0,
+    80
+  );
 }
 
-function getDisplayName(participant = {}) {
+function getDisplayName(
+  participant = {}
+) {
   const ids = [
     participant.id,
     participant.lid,
     participant.phoneNumber
   ].filter(Boolean);
 
-  for (const id of ids) {
-    const cached = contactNames.get(id);
+  for (
+    const id of ids
+  ) {
+    const cached =
+      contactNames.get(id);
 
     if (cached) {
       return cached;
     }
   }
 
-  const directName = cleanName(
-    participant.username ||
-    participant.notify ||
-    participant.name ||
-    participant.verifiedName ||
-    participant.pushName
-  );
+  const directName =
+    cleanName(
+      participant.username ||
+      participant.notify ||
+      participant.name ||
+      participant.verifiedName ||
+      participant.pushName
+    );
 
   if (directName) {
     return directName;
   }
 
-  if (participant.phoneNumber) {
-    const phone = String(
-      participant.phoneNumber
-    )
-      .replace(/@s.whatsapp.net/g, "")
-      .replace(/[^0-9]/g, "");
+  if (
+    participant.phoneNumber
+  ) {
+    const phone =
+      String(
+        participant.phoneNumber
+      )
+        .replace(
+          /@s.whatsapp.net/g,
+          ""
+        )
+        .replace(
+          /[^0-9]/g,
+          ""
+        );
 
     if (phone) {
       return phone;
@@ -254,7 +400,9 @@ function getDisplayName(participant = {}) {
 
   if (participant.id) {
     const idPart =
-      String(participant.id).split("@")[0];
+      String(
+        participant.id
+      ).split("@")[0];
 
     if (idPart) {
       return idPart;
@@ -268,21 +416,34 @@ function getDisplayName(participant = {}) {
    LID ↔ PHONE MAPPING
 ========================================================= */
 
-function saveLidMapping(lid, pn) {
-  const lidJid = normalizeJid(lid);
+function saveLidMapping(
+  lid,
+  pn
+) {
+  const lidJid =
+    normalizeJid(lid);
 
-  let phoneJid = normalizeJid(pn);
+  let phoneJid =
+    normalizeJid(pn);
 
-  if (!isLidJid(lidJid)) {
+  if (
+    !isLidJid(lidJid)
+  ) {
     return;
   }
 
-  if (!isPhoneJid(phoneJid)) {
+  if (
+    !isPhoneJid(phoneJid)
+  ) {
     phoneJid =
-      phoneNumberToJid(phoneJid);
+      phoneNumberToJid(
+        phoneJid
+      );
   }
 
-  if (!isPhoneJid(phoneJid)) {
+  if (
+    !isPhoneJid(phoneJid)
+  ) {
     return;
   }
 
@@ -297,16 +458,22 @@ function saveLidMapping(lid, pn) {
   );
 }
 
-async function resolveLidToPhoneJid(lid) {
+async function resolveLidToPhoneJid(
+  lid
+) {
   if (!lid) {
     return null;
   }
 
-  if (isPhoneJid(lid)) {
+  if (
+    isPhoneJid(lid)
+  ) {
     return lid;
   }
 
-  if (!isLidJid(lid)) {
+  if (
+    !isLidJid(lid)
+  ) {
     return null;
   }
 
@@ -314,13 +481,16 @@ async function resolveLidToPhoneJid(lid) {
     lidToPhoneJid.get(lid) ||
     contactPhoneJids.get(lid);
 
-  if (isPhoneJid(cached)) {
+  if (
+    isPhoneJid(cached)
+  ) {
     return cached;
   }
 
   try {
     const mapping =
-      sock?.signalRepository?.lidMapping;
+      sock?.signalRepository
+        ?.lidMapping;
 
     if (
       mapping &&
@@ -328,7 +498,9 @@ async function resolveLidToPhoneJid(lid) {
         "function"
     ) {
       const pn =
-        await mapping.getPNForLID(lid);
+        await mapping.getPNForLID(
+          lid
+        );
 
       const phoneJid =
         isPhoneJid(pn)
@@ -344,6 +516,7 @@ async function resolveLidToPhoneJid(lid) {
         return phoneJid;
       }
     }
+
   } catch (error) {
     console.log(
       "⚠️ LID → Phone mapping error:",
@@ -358,21 +531,31 @@ async function resolveLidToPhoneJid(lid) {
    CONTACT CACHE
 ========================================================= */
 
-function saveContacts(contacts = []) {
-  for (const contact of contacts) {
+function saveContacts(
+  contacts = []
+) {
+  for (
+    const contact of contacts
+  ) {
     if (!contact) {
       continue;
     }
 
     const id =
-      normalizeJid(contact.id);
+      normalizeJid(
+        contact.id
+      );
 
     const lid =
-      normalizeJid(contact.lid);
+      normalizeJid(
+        contact.lid
+      );
 
     let phoneJid = null;
 
-    if (contact.phoneNumber) {
+    if (
+      contact.phoneNumber
+    ) {
       phoneJid =
         isPhoneJid(
           contact.phoneNumber
@@ -472,7 +655,9 @@ function saveContacts(contacts = []) {
 function getDirectPhoneJid(
   participant = {}
 ) {
-  if (participant.phoneNumber) {
+  if (
+    participant.phoneNumber
+  ) {
     const jid =
       isPhoneJid(
         participant.phoneNumber
@@ -515,16 +700,22 @@ async function getPhoneJid(
     participant.lid
   ].filter(Boolean);
 
-  for (const id of ids) {
+  for (
+    const id of ids
+  ) {
     const cached =
       contactPhoneJids.get(id) ||
       lidToPhoneJid.get(id);
 
-    if (isPhoneJid(cached)) {
+    if (
+      isPhoneJid(cached)
+    ) {
       return cached;
     }
 
-    if (isLidJid(id)) {
+    if (
+      isLidJid(id)
+    ) {
       const resolved =
         await resolveLidToPhoneJid(
           id
@@ -677,7 +868,9 @@ function isOwnerParticipant(
   );
 }
 
-function isGroupAllowed(jid) {
+function isGroupAllowed(
+  jid
+) {
   if (
     !jid ||
     !jid.endsWith("@g.us")
@@ -710,10 +903,90 @@ function findParticipant(
 }
 
 /* =========================================================
+   ADMIN CHECK
+   শুধু Group Admin + Owner
+========================================================= */
+
+async function isSenderAdmin(
+  remoteJid,
+  message
+) {
+  try {
+    const participantJid =
+      message?.key?.participant;
+
+    if (!participantJid) {
+      return false;
+    }
+
+    const metadata =
+      await sock.groupMetadata(
+        remoteJid
+      );
+
+    const participants =
+      metadata?.participants || [];
+
+    await cacheParticipants(
+      participants
+    );
+
+    let sender =
+      findParticipant(
+        participants,
+        participantJid
+      );
+
+    if (!sender) {
+      const senderPhone =
+        await resolveLidToPhoneJid(
+          participantJid
+        );
+
+      if (senderPhone) {
+        sender =
+          findParticipant(
+            participants,
+            senderPhone
+          );
+      }
+    }
+
+    if (!sender) {
+      sender =
+        participants.find(
+          participant =>
+            participant?.id ===
+              participantJid ||
+            participant?.lid ===
+              participantJid
+        );
+    }
+
+    return Boolean(
+      sender &&
+      isAdminParticipant(
+        sender
+      )
+    );
+
+  } catch (error) {
+    console.log(
+      "⚠️ Admin check error:",
+      error?.message
+    );
+
+    return false;
+  }
+}
+
+/* =========================================================
    MESSAGE
 ========================================================= */
 
-function getMessageText(message) {
+function getMessageText(
+  message
+) {
   const msg =
     message?.message;
 
@@ -773,6 +1046,13 @@ const MENU_TEXT = `
 ╭─❖ 🌐 *Our Official Website*
 │
 │ 1️⃣1️⃣ /website
+│
+╰────────────────────
+
+╭─❖ 🤖 *BOT CONTROL*
+│
+│ 🔴 /botoff
+│ 🟢 /botone
 │
 ╰────────────────────
 
@@ -840,7 +1120,9 @@ Google Play Points এবং
    WELCOME
 ========================================================= */
 
-function getWelcomeText(name) {
+function getWelcomeText(
+  name
+) {
   return `
 ╭━━━━━━━━━━━━━━━━━━━━╮
         🎉 *স্বাগতম*
@@ -950,112 +1232,45 @@ Admin-এর মাধ্যমে Deal করুন।
 `;
 
 /* =========================================================
-   ADMIN DATA
+   BOT CONTROL NOTICE
 ========================================================= */
 
-async function getAdminData(remoteJid) {
-  const metadata =
-    await sock.groupMetadata(
-      remoteJid
-    );
+const BOT_OFF_TEXT = `
+🔴 *BOT OFF*
 
-  const participants =
-    metadata?.participants || [];
+বট এখন সাময়িকভাবে বন্ধ করা হয়েছে।
 
-  await cacheParticipants(
-    participants
-  );
+🛠️ আবার চালু করতে:
+*/botone*
+`;
 
-  const admins =
-    participants.filter(
-      isAdminParticipant
-    );
+const BOT_ON_TEXT = `
+🟢 *BOT ON*
 
-  const owners =
-    admins.filter(
-      isOwnerParticipant
-    );
+বট এখন পুনরায় চালু করা হয়েছে। ✅
 
-  const normalAdmins =
-    admins.filter(
-      participant =>
-        !isOwnerParticipant(
-          participant
-        )
-    );
+🤖 এখন সব Command ব্যবহার করা যাবে।
+`;
 
-  const result = [];
+const BOT_ALREADY_OFF_TEXT = `
+🔴 *BOT STATUS*
 
-  for (
-    const participant of owners
-  ) {
-    let jid =
-      await getPhoneJid(
-        participant
-      );
+বট ইতোমধ্যে OFF আছে।
+`;
 
-    if (
-      !jid &&
-      isPhoneJid(
-        metadata?.ownerPn
-      )
-    ) {
-      jid =
-        metadata.ownerPn;
-    }
+const BOT_ALREADY_ON_TEXT = `
+🟢 *BOT STATUS*
 
-    if (
-      !jid &&
-      isPhoneJid(
-        metadata?.subjectOwnerPn
-      )
-    ) {
-      jid =
-        metadata.subjectOwnerPn;
-    }
-
-    result.push({
-      participant,
-      jid,
-      name:
-        getDisplayName(
-          participant
-        ),
-      owner: true
-    });
-  }
-
-  for (
-    const participant of normalAdmins
-  ) {
-    const jid =
-      await getPhoneJid(
-        participant
-      );
-
-    result.push({
-      participant,
-      jid,
-      name:
-        getDisplayName(
-          participant
-        ),
-      owner: false
-    });
-  }
-
-  return {
-    metadata,
-    admins,
-    result
-  };
-}
+বট ইতোমধ্যে ON আছে।
+`;
 
 /* =========================================================
    DEAL MESSAGE
 ========================================================= */
 
-async function sendDealNotice(remoteJid) {
+async function sendDealNotice(
+  remoteJid
+) {
   try {
     if (!sock) {
       return;
@@ -1179,6 +1394,17 @@ async function sendWelcome(
       return;
     }
 
+    /*
+     * Bot OFF থাকলেও নতুন Member welcome
+     * পাঠাবে না।
+     */
+
+    if (
+      !isBotEnabled(groupId)
+    ) {
+      return;
+    }
+
     let metadata = null;
 
     try {
@@ -1188,20 +1414,24 @@ async function sendWelcome(
         );
 
       await cacheParticipants(
-        metadata?.participants || []
+        metadata?.participants ||
+          []
       );
+
     } catch {}
 
     let member =
       findParticipant(
-        metadata?.participants || [],
+        metadata?.participants ||
+          [],
         participant?.id
       );
 
     if (!member) {
       member =
         findParticipant(
-          metadata?.participants || [],
+          metadata?.participants ||
+            [],
           participant?.lid
         );
     }
@@ -1346,7 +1576,9 @@ async function generatePairingCode(
       return;
     }
 
-    if (state.creds.registered) {
+    if (
+      state.creds.registered
+    ) {
       console.log(
         "✅ Existing WhatsApp session found."
       );
@@ -1491,7 +1723,7 @@ async function startBot() {
       );
 
       console.log(
-        `🔄 PHONE NUMBER CHANGED`
+        "🔄 PHONE NUMBER CHANGED"
       );
 
       console.log(
@@ -1614,7 +1846,8 @@ async function startBot() {
             event?.action;
 
           const participants =
-            event?.participants || [];
+            event?.participants ||
+            [];
 
           if (!groupId) {
             return;
@@ -1689,14 +1922,6 @@ async function startBot() {
             console.log(
               "🔄 Connecting to WhatsApp..."
             );
-
-            /*
-             * Pairing Code is generated BEFORE
-             * the connection becomes "open".
-             *
-             * If the same number was already saved,
-             * no new code will be generated.
-             */
 
             if (
               PHONE_NUMBER &&
@@ -1779,14 +2004,6 @@ async function startBot() {
             );
 
             sock = null;
-
-            /*
-             * Reset only the in-memory flag.
-             *
-             * pairing_number.txt remains untouched.
-             * Therefore the same PHONE_NUMBER will not
-             * generate a new pairing code.
-             */
 
             pairingRequested = false;
 
@@ -1883,6 +2100,130 @@ async function startBot() {
             text
               .split(/\s+/)[0]
               .toLowerCase();
+
+          /* ===============================================
+             BOT OFF / ON
+             
+             এই দুই কমান্ড সবসময় আগে চেক হবে,
+             যাতে Bot OFF থাকলেও Admin Bot ON করতে পারে।
+          =============================================== */
+
+          if (
+            command === "/botoff"
+          ) {
+            const admin =
+              await isSenderAdmin(
+                remoteJid,
+                message
+              );
+
+            if (!admin) {
+              /*
+               * সাধারণ Member হলে কোনো response নয়।
+               */
+              return;
+            }
+
+            if (
+              !isBotEnabled(
+                remoteJid
+              )
+            ) {
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text:
+                    BOT_ALREADY_OFF_TEXT
+                }
+              );
+
+              return;
+            }
+
+            setBotStatus(
+              remoteJid,
+              false
+            );
+
+            await sock.sendMessage(
+              remoteJid,
+              {
+                text:
+                  BOT_OFF_TEXT
+              }
+            );
+
+            console.log(
+              `🔴 Bot OFF | Group: ${remoteJid}`
+            );
+
+            return;
+          }
+
+          if (
+            command === "/botone"
+          ) {
+            const admin =
+              await isSenderAdmin(
+                remoteJid,
+                message
+              );
+
+            if (!admin) {
+              /*
+               * সাধারণ Member হলে কোনো response নয়।
+               */
+              return;
+            }
+
+            if (
+              isBotEnabled(
+                remoteJid
+              )
+            ) {
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text:
+                    BOT_ALREADY_ON_TEXT
+                }
+              );
+
+              return;
+            }
+
+            setBotStatus(
+              remoteJid,
+              true
+            );
+
+            await sock.sendMessage(
+              remoteJid,
+              {
+                text:
+                  BOT_ON_TEXT
+              }
+            );
+
+            console.log(
+              `🟢 Bot ON | Group: ${remoteJid}`
+            );
+
+            return;
+          }
+
+          /* ===============================================
+             BOT OFF হলে এখান থেকে অন্য কোনো
+             command কাজ করবে না।
+          =============================================== */
+
+          if (
+            !isBotEnabled(
+              remoteJid
+            )
+          ) {
+            return;
+          }
 
           /* ===============================================
              MENU
@@ -2069,6 +2410,14 @@ async function startBot() {
 
 📅 *Created:* ${
                   created
+                }
+
+🤖 *Bot:* ${
+                  isBotEnabled(
+                    remoteJid
+                  )
+                    ? "🟢 ON"
+                    : "🔴 OFF"
                 }
 
 🤍 *Powered by Piyas*
