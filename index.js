@@ -1,5 +1,6 @@
 import "dotenv/config";
 import http from "http";
+import fs from "fs";
 
 import makeWASocket, {
   Browsers,
@@ -9,6 +10,10 @@ import makeWASocket, {
 
 import { Boom } from "@hapi/boom";
 import P from "pino";
+
+/* =========================================================
+   CONFIG
+========================================================= */
 
 const PORT = Number(process.env.PORT || 3000);
 
@@ -22,6 +27,9 @@ const PHONE_NUMBER = (process.env.PHONE_NUMBER || "")
 
 const WEBSITE_URL =
   "https://x-cyber-2025.github.io/X-cyber.web/";
+
+const AUTH_DIR = "./auth_info";
+const PAIRING_NUMBER_FILE = "./pairing_number.txt";
 
 let sock = null;
 let reconnecting = false;
@@ -67,6 +75,81 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => {
   console.log(`🌐 Server running on port ${PORT}`);
 });
+
+/* =========================================================
+   PAIRING NUMBER MEMORY
+========================================================= */
+
+function readSavedPairingNumber() {
+  try {
+    if (!fs.existsSync(PAIRING_NUMBER_FILE)) {
+      return "";
+    }
+
+    return fs
+      .readFileSync(PAIRING_NUMBER_FILE, "utf8")
+      .trim()
+      .replace(/[^0-9]/g, "");
+  } catch (error) {
+    console.log(
+      "⚠️ Pairing number read error:",
+      error?.message
+    );
+
+    return "";
+  }
+}
+
+function savePairingNumber(number) {
+  try {
+    fs.writeFileSync(
+      PAIRING_NUMBER_FILE,
+      number,
+      "utf8"
+    );
+  } catch (error) {
+    console.log(
+      "⚠️ Pairing number save error:",
+      error?.message
+    );
+  }
+}
+
+function getCredentialPhoneNumber(creds) {
+  const id = creds?.me?.id;
+
+  if (!id || typeof id !== "string") {
+    return "";
+  }
+
+  return id
+    .split(":")[0]
+    .split("@")[0]
+    .replace(/[^0-9]/g, "");
+}
+
+async function resetAuthForNumberChange() {
+  try {
+    if (fs.existsSync(AUTH_DIR)) {
+      await fs.promises.rm(
+        AUTH_DIR,
+        {
+          recursive: true,
+          force: true
+        }
+      );
+
+      console.log(
+        "🗑️ Old WhatsApp session removed."
+      );
+    }
+  } catch (error) {
+    console.log(
+      "❌ Failed to remove old session:",
+      error?.message
+    );
+  }
+}
 
 /* =========================================================
    JID HELPERS
@@ -158,7 +241,9 @@ function getDisplayName(participant = {}) {
   }
 
   if (participant.phoneNumber) {
-    const phone = String(participant.phoneNumber)
+    const phone = String(
+      participant.phoneNumber
+    )
       .replace(/@s.whatsapp.net/g, "")
       .replace(/[^0-9]/g, "");
 
@@ -168,7 +253,8 @@ function getDisplayName(participant = {}) {
   }
 
   if (participant.id) {
-    const idPart = String(participant.id).split("@")[0];
+    const idPart =
+      String(participant.id).split("@")[0];
 
     if (idPart) {
       return idPart;
@@ -192,15 +278,23 @@ function saveLidMapping(lid, pn) {
   }
 
   if (!isPhoneJid(phoneJid)) {
-    phoneJid = phoneNumberToJid(phoneJid);
+    phoneJid =
+      phoneNumberToJid(phoneJid);
   }
 
   if (!isPhoneJid(phoneJid)) {
     return;
   }
 
-  lidToPhoneJid.set(lidJid, phoneJid);
-  contactPhoneJids.set(lidJid, phoneJid);
+  lidToPhoneJid.set(
+    lidJid,
+    phoneJid
+  );
+
+  contactPhoneJids.set(
+    lidJid,
+    phoneJid
+  );
 }
 
 async function resolveLidToPhoneJid(lid) {
@@ -230,16 +324,23 @@ async function resolveLidToPhoneJid(lid) {
 
     if (
       mapping &&
-      typeof mapping.getPNForLID === "function"
+      typeof mapping.getPNForLID ===
+        "function"
     ) {
-      const pn = await mapping.getPNForLID(lid);
+      const pn =
+        await mapping.getPNForLID(lid);
 
-      const phoneJid = isPhoneJid(pn)
-        ? pn
-        : phoneNumberToJid(pn);
+      const phoneJid =
+        isPhoneJid(pn)
+          ? pn
+          : phoneNumberToJid(pn);
 
       if (phoneJid) {
-        saveLidMapping(lid, phoneJid);
+        saveLidMapping(
+          lid,
+          phoneJid
+        );
+
         return phoneJid;
       }
     }
@@ -263,61 +364,103 @@ function saveContacts(contacts = []) {
       continue;
     }
 
-    const id = normalizeJid(contact.id);
-    const lid = normalizeJid(contact.lid);
+    const id =
+      normalizeJid(contact.id);
+
+    const lid =
+      normalizeJid(contact.lid);
 
     let phoneJid = null;
 
     if (contact.phoneNumber) {
-      phoneJid = isPhoneJid(contact.phoneNumber)
-        ? contact.phoneNumber
-        : phoneNumberToJid(contact.phoneNumber);
+      phoneJid =
+        isPhoneJid(
+          contact.phoneNumber
+        )
+          ? contact.phoneNumber
+          : phoneNumberToJid(
+              contact.phoneNumber
+            );
     }
 
-    if (!phoneJid && isPhoneJid(id)) {
+    if (
+      !phoneJid &&
+      isPhoneJid(id)
+    ) {
       phoneJid = id;
     }
 
-    if (phoneJid && isLidJid(id)) {
-      saveLidMapping(id, phoneJid);
+    if (
+      phoneJid &&
+      isLidJid(id)
+    ) {
+      saveLidMapping(
+        id,
+        phoneJid
+      );
     }
 
-    if (phoneJid && lid) {
-      saveLidMapping(lid, phoneJid);
+    if (
+      phoneJid &&
+      lid
+    ) {
+      saveLidMapping(
+        lid,
+        phoneJid
+      );
     }
 
-    const name = cleanName(
-      contact.username ||
-      contact.notify ||
-      contact.name ||
-      contact.verifiedName ||
-      contact.pushName
-    );
+    const name =
+      cleanName(
+        contact.username ||
+        contact.notify ||
+        contact.name ||
+        contact.verifiedName ||
+        contact.pushName
+      );
 
     if (name) {
       if (id) {
-        contactNames.set(id, name);
+        contactNames.set(
+          id,
+          name
+        );
       }
 
       if (lid) {
-        contactNames.set(lid, name);
+        contactNames.set(
+          lid,
+          name
+        );
       }
 
       if (phoneJid) {
-        contactNames.set(phoneJid, name);
+        contactNames.set(
+          phoneJid,
+          name
+        );
       }
     }
 
     if (phoneJid) {
       if (id) {
-        contactPhoneJids.set(id, phoneJid);
+        contactPhoneJids.set(
+          id,
+          phoneJid
+        );
       }
 
       if (lid) {
-        contactPhoneJids.set(lid, phoneJid);
+        contactPhoneJids.set(
+          lid,
+          phoneJid
+        );
       }
 
-      contactPhoneJids.set(phoneJid, phoneJid);
+      contactPhoneJids.set(
+        phoneJid,
+        phoneJid
+      );
     }
   }
 }
@@ -326,26 +469,42 @@ function saveContacts(contacts = []) {
    PHONE JID
 ========================================================= */
 
-function getDirectPhoneJid(participant = {}) {
+function getDirectPhoneJid(
+  participant = {}
+) {
   if (participant.phoneNumber) {
-    const jid = isPhoneJid(participant.phoneNumber)
-      ? participant.phoneNumber
-      : phoneNumberToJid(participant.phoneNumber);
+    const jid =
+      isPhoneJid(
+        participant.phoneNumber
+      )
+        ? participant.phoneNumber
+        : phoneNumberToJid(
+            participant.phoneNumber
+          );
 
     if (jid) {
       return jid;
     }
   }
 
-  if (isPhoneJid(participant.id)) {
+  if (
+    isPhoneJid(
+      participant.id
+    )
+  ) {
     return participant.id;
   }
 
   return null;
 }
 
-async function getPhoneJid(participant = {}) {
-  const direct = getDirectPhoneJid(participant);
+async function getPhoneJid(
+  participant = {}
+) {
+  const direct =
+    getDirectPhoneJid(
+      participant
+    );
 
   if (direct) {
     return direct;
@@ -367,7 +526,9 @@ async function getPhoneJid(participant = {}) {
 
     if (isLidJid(id)) {
       const resolved =
-        await resolveLidToPhoneJid(id);
+        await resolveLidToPhoneJid(
+          id
+        );
 
       if (resolved) {
         return resolved;
@@ -378,39 +539,60 @@ async function getPhoneJid(participant = {}) {
   return null;
 }
 
-async function cacheParticipants(participants = []) {
-  for (const participant of participants) {
+async function cacheParticipants(
+  participants = []
+) {
+  for (
+    const participant of participants
+  ) {
     if (!participant) {
       continue;
     }
 
-    const name = getDisplayName(participant);
+    const name =
+      getDisplayName(
+        participant
+      );
 
     let phoneJid =
-      getDirectPhoneJid(participant);
+      getDirectPhoneJid(
+        participant
+      );
 
-    if (!phoneJid && participant.id) {
+    if (
+      !phoneJid &&
+      participant.id
+    ) {
       phoneJid =
         await resolveLidToPhoneJid(
           participant.id
         );
     }
 
-    if (!phoneJid && participant.lid) {
+    if (
+      !phoneJid &&
+      participant.lid
+    ) {
       phoneJid =
         await resolveLidToPhoneJid(
           participant.lid
         );
     }
 
-    if (phoneJid && participant.id) {
+    if (
+      phoneJid &&
+      participant.id
+    ) {
       contactPhoneJids.set(
         participant.id,
         phoneJid
       );
     }
 
-    if (phoneJid && participant.lid) {
+    if (
+      phoneJid &&
+      participant.lid
+    ) {
       contactPhoneJids.set(
         participant.lid,
         phoneJid
@@ -419,7 +601,9 @@ async function cacheParticipants(participants = []) {
 
     if (
       phoneJid &&
-      isLidJid(participant.id)
+      isLidJid(
+        participant.id
+      )
     ) {
       saveLidMapping(
         participant.id,
@@ -429,7 +613,9 @@ async function cacheParticipants(participants = []) {
 
     if (
       phoneJid &&
-      isLidJid(participant.lid)
+      isLidJid(
+        participant.lid
+      )
     ) {
       saveLidMapping(
         participant.lid,
@@ -469,7 +655,9 @@ async function cacheParticipants(participants = []) {
    GROUP HELPERS
 ========================================================= */
 
-function isAdminParticipant(participant = {}) {
+function isAdminParticipant(
+  participant = {}
+) {
   return (
     participant.admin === "admin" ||
     participant.admin === "superadmin" ||
@@ -479,9 +667,12 @@ function isAdminParticipant(participant = {}) {
   );
 }
 
-function isOwnerParticipant(participant = {}) {
+function isOwnerParticipant(
+  participant = {}
+) {
   return (
-    participant.admin === "superadmin" ||
+    participant.admin ===
+      "superadmin" ||
     participant.isSuperAdmin === true
   );
 }
@@ -523,7 +714,8 @@ function findParticipant(
 ========================================================= */
 
 function getMessageText(message) {
-  const msg = message?.message;
+  const msg =
+    message?.message;
 
   if (!msg) {
     return "";
@@ -794,7 +986,9 @@ async function getAdminData(remoteJid) {
 
   const result = [];
 
-  for (const participant of owners) {
+  for (
+    const participant of owners
+  ) {
     let jid =
       await getPhoneJid(
         participant
@@ -831,7 +1025,9 @@ async function getAdminData(remoteJid) {
     });
   }
 
-  for (const participant of normalAdmins) {
+  for (
+    const participant of normalAdmins
+  ) {
     const jid =
       await getPhoneJid(
         participant
@@ -868,9 +1064,10 @@ async function sendDealNotice(remoteJid) {
     const {
       admins,
       result
-    } = await getAdminData(
-      remoteJid
-    );
+    } =
+      await getAdminData(
+        remoteJid
+      );
 
     if (!admins.length) {
       await sock.sendMessage(
@@ -888,13 +1085,17 @@ async function sendDealNotice(remoteJid) {
 
     const lines = [];
     const mentions = [];
-    const usedJids = new Set();
+    const usedJids =
+      new Set();
 
     let number = 1;
 
-    for (const admin of result) {
+    for (
+      const admin of result
+    ) {
       const name =
-        admin.name || "Admin";
+        admin.name ||
+        "Admin";
 
       const jid =
         admin.jid;
@@ -934,7 +1135,9 @@ async function sendDealNotice(remoteJid) {
       {
         text,
         mentions: [
-          ...new Set(mentions)
+          ...new Set(
+            mentions
+          )
         ]
       }
     );
@@ -1008,17 +1211,25 @@ async function sendWelcome(
     }
 
     const name =
-      getDisplayName(member);
+      getDisplayName(
+        member
+      );
 
     const phoneJid =
-      await getPhoneJid(member);
+      await getPhoneJid(
+        member
+      );
 
-    if (isPhoneJid(phoneJid)) {
+    if (
+      isPhoneJid(phoneJid)
+    ) {
       await sock.sendMessage(
         groupId,
         {
           text:
-            getWelcomeText(name),
+            getWelcomeText(
+              name
+            ),
           mentions: [
             phoneJid
           ]
@@ -1033,7 +1244,9 @@ async function sendWelcome(
     }
 
     const fallbackText =
-      getWelcomeText(name).replace(
+      getWelcomeText(
+        name
+      ).replace(
         `@${name}`,
         name
       );
@@ -1041,7 +1254,8 @@ async function sendWelcome(
     await sock.sendMessage(
       groupId,
       {
-        text: fallbackText
+        text:
+          fallbackText
       }
     );
 
@@ -1061,7 +1275,9 @@ async function sendWelcome(
    LID MAPPING EVENT
 ========================================================= */
 
-function handleLidMappingUpdate(mapping) {
+function handleLidMappingUpdate(
+  mapping
+) {
   try {
     if (!mapping) {
       return;
@@ -1076,7 +1292,9 @@ function handleLidMappingUpdate(mapping) {
         ? mapping.mappings
         : [mapping];
 
-    for (const item of mappings) {
+    for (
+      const item of mappings
+    ) {
       if (!item) {
         continue;
       }
@@ -1093,7 +1311,10 @@ function handleLidMappingUpdate(mapping) {
         item.phone ||
         item.phoneNumber;
 
-      if (lid && pn) {
+      if (
+        lid &&
+        pn
+      ) {
         saveLidMapping(
           lid,
           pn
@@ -1110,17 +1331,204 @@ function handleLidMappingUpdate(mapping) {
 }
 
 /* =========================================================
+   PAIRING CODE
+========================================================= */
+
+async function generatePairingCode(
+  state
+) {
+  try {
+    if (!PHONE_NUMBER) {
+      console.log(
+        "❌ PHONE_NUMBER is missing in .env"
+      );
+
+      return;
+    }
+
+    if (state.creds.registered) {
+      console.log(
+        "✅ Existing WhatsApp session found."
+      );
+
+      console.log(
+        "🔐 Pairing Code will NOT be generated."
+      );
+
+      return;
+    }
+
+    const savedNumber =
+      readSavedPairingNumber();
+
+    if (
+      savedNumber &&
+      savedNumber === PHONE_NUMBER
+    ) {
+      console.log(
+        "ℹ️ Same PHONE_NUMBER detected."
+      );
+
+      console.log(
+        "🔐 Pairing Code will NOT be generated again."
+      );
+
+      return;
+    }
+
+    if (pairingRequested) {
+      return;
+    }
+
+    pairingRequested = true;
+
+    console.log(
+      `📱 New PHONE_NUMBER detected: ${PHONE_NUMBER}`
+    );
+
+    console.log(
+      "🔐 Generating WhatsApp Pairing Code..."
+    );
+
+    await new Promise(
+      resolve =>
+        setTimeout(
+          resolve,
+          2500
+        )
+    );
+
+    if (
+      !sock ||
+      state.creds.registered
+    ) {
+      pairingRequested = false;
+      return;
+    }
+
+    const code =
+      await sock.requestPairingCode(
+        PHONE_NUMBER
+      );
+
+    savePairingNumber(
+      PHONE_NUMBER
+    );
+
+    console.log(
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    );
+
+    console.log(
+      `🔐 PAIRING CODE: ${code}`
+    );
+
+    console.log(
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    );
+
+    console.log(
+      "📲 WhatsApp → Settings → Linked Devices → Link a Device → Link with phone number instead"
+    );
+
+  } catch (error) {
+    pairingRequested = false;
+
+    console.log(
+      "❌ Pairing code error:",
+      error?.message
+    );
+  }
+}
+
+/* =========================================================
    START BOT
 ========================================================= */
 
 async function startBot() {
   try {
-    const {
+    let authState =
+      await useMultiFileAuthState(
+        AUTH_DIR
+      );
+
+    let {
       state,
       saveCreds
-    } = await useMultiFileAuthState(
-      "./auth_info"
-    );
+    } = authState;
+
+    const currentCredPhone =
+      getCredentialPhoneNumber(
+        state.creds
+      );
+
+    const savedPairingNumber =
+      readSavedPairingNumber();
+
+    /* =====================================================
+       NUMBER CHANGE DETECTION
+    ===================================================== */
+
+    const numberChanged =
+      PHONE_NUMBER &&
+      (
+        (
+          state.creds.registered &&
+          currentCredPhone &&
+          currentCredPhone !== PHONE_NUMBER
+        ) ||
+        (
+          state.creds.registered &&
+          !currentCredPhone &&
+          savedPairingNumber &&
+          savedPairingNumber !== PHONE_NUMBER
+        )
+      );
+
+    if (numberChanged) {
+      console.log(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      );
+
+      console.log(
+        `🔄 PHONE NUMBER CHANGED`
+      );
+
+      console.log(
+        `Old: ${currentCredPhone || savedPairingNumber}`
+      );
+
+      console.log(
+        `New: ${PHONE_NUMBER}`
+      );
+
+      console.log(
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      );
+
+      await resetAuthForNumberChange();
+
+      pairingRequested = false;
+
+      authState =
+        await useMultiFileAuthState(
+          AUTH_DIR
+        );
+
+      state =
+        authState.state;
+
+      saveCreds =
+        authState.saveCreds;
+
+      console.log(
+        "🆕 New WhatsApp session created."
+      );
+    }
+
+    /* =====================================================
+       SOCKET
+    ===================================================== */
 
     sock =
       makeWASocket({
@@ -1133,7 +1541,8 @@ async function startBot() {
         markOnlineOnConnect: false,
         syncFullHistory: false,
         generateHighQualityLinkPreview:
-          false
+          false,
+        printQRInTerminal: false
       });
 
     /* =====================================================
@@ -1269,6 +1678,10 @@ async function startBot() {
             lastDisconnect
           } = update;
 
+          /* ===============================================
+             CONNECTING
+          =============================================== */
+
           if (
             connection ===
             "connecting"
@@ -1276,17 +1689,45 @@ async function startBot() {
             console.log(
               "🔄 Connecting to WhatsApp..."
             );
+
+            /*
+             * Pairing Code is generated BEFORE
+             * the connection becomes "open".
+             *
+             * If the same number was already saved,
+             * no new code will be generated.
+             */
+
+            if (
+              PHONE_NUMBER &&
+              !state.creds.registered
+            ) {
+              await generatePairingCode(
+                state
+              );
+            }
           }
+
+          /* ===============================================
+             OPEN
+          =============================================== */
 
           if (
             connection === "open"
           ) {
             console.log(
+              "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            );
+
+            console.log(
               "✅ WhatsApp Bot Connected Successfully!"
             );
 
+            console.log(
+              "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            );
+
             reconnecting = false;
-            pairingRequested = false;
 
             try {
               const groups =
@@ -1298,7 +1739,8 @@ async function startBot() {
                 )
               ) {
                 await cacheParticipants(
-                  group?.participants || []
+                  group?.participants ||
+                    []
                 );
               }
 
@@ -1313,35 +1755,12 @@ async function startBot() {
               );
             }
 
-            if (
-              PHONE_NUMBER &&
-              !state.creds.registered &&
-              !pairingRequested
-            ) {
-              try {
-                pairingRequested = true;
-
-                const code =
-                  await sock.requestPairingCode(
-                    PHONE_NUMBER
-                  );
-
-                console.log(
-                  `🔐 Pairing Code: ${code}`
-                );
-
-              } catch (error) {
-                console.log(
-                  "⚠️ Pairing code error:",
-                  error?.message
-                );
-
-                pairingRequested = false;
-              }
-            }
-
             return;
           }
+
+          /* ===============================================
+             CLOSE
+          =============================================== */
 
           if (
             connection === "close"
@@ -1360,6 +1779,16 @@ async function startBot() {
             );
 
             sock = null;
+
+            /*
+             * Reset only the in-memory flag.
+             *
+             * pairing_number.txt remains untouched.
+             * Therefore the same PHONE_NUMBER will not
+             * generate a new pairing code.
+             */
+
+            pairingRequested = false;
 
             if (
               shouldReconnect &&
@@ -1383,7 +1812,11 @@ async function startBot() {
               !shouldReconnect
             ) {
               console.log(
-                "🚪 Logged out. Please pair the bot again."
+                "🚪 WhatsApp session logged out."
+              );
+
+              console.log(
+                "ℹ️ New number দিলে নতুন Pairing Code generate হবে."
               );
             }
           }
@@ -1422,7 +1855,9 @@ async function startBot() {
 
           if (
             !remoteJid ||
-            !remoteJid.endsWith("@g.us")
+            !remoteJid.endsWith(
+              "@g.us"
+            )
           ) {
             return;
           }
@@ -1460,7 +1895,8 @@ async function startBot() {
             await sock.sendMessage(
               remoteJid,
               {
-                text: MENU_TEXT
+                text:
+                  MENU_TEXT
               }
             );
 
@@ -1477,7 +1913,8 @@ async function startBot() {
             await sock.sendMessage(
               remoteJid,
               {
-                text: GROUP_RULES
+                text:
+                  GROUP_RULES
               }
             );
 
@@ -1494,7 +1931,8 @@ async function startBot() {
             await sock.sendMessage(
               remoteJid,
               {
-                text: WEBSITE_TEXT
+                text:
+                  WEBSITE_TEXT
               }
             );
 
@@ -1583,7 +2021,8 @@ async function startBot() {
               );
 
             const participants =
-              metadata?.participants || [];
+              metadata?.participants ||
+              [];
 
             await cacheParticipants(
               participants
@@ -1653,7 +2092,8 @@ async function startBot() {
               );
 
             const participants =
-              metadata?.participants || [];
+              metadata?.participants ||
+              [];
 
             await sock.sendMessage(
               remoteJid,
@@ -1756,7 +2196,9 @@ ${lines.join("\n\n")}
 🤍 *Piyas*
 `,
                 mentions: [
-                  ...new Set(mentions)
+                  ...new Set(
+                    mentions
+                  )
                 ]
               }
             );
