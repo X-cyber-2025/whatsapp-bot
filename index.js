@@ -931,8 +931,6 @@ async function isSenderAdmin(
 
 /* =========================================================
    ADMIN DATA
-   Group Owner + সকল Admin
-   LID → Phone JID
 ========================================================= */
 
 async function getAdminData(remoteJid) {
@@ -1080,9 +1078,6 @@ async function getAdminData(remoteJid) {
         }
       }
 
-      /*
-       * একই Phone JID duplicate হলে বাদ
-       */
       if (
         phoneJid &&
         usedJids.has(
@@ -1202,7 +1197,7 @@ const MENU_TEXT = `
 ╭─❖ 🤖 *BOT CONTROL*
 │
 │ 🔴 /botoff
-│ 🟢 /botone
+│ 🟢 /boton
 │
 ╰────────────────────
 
@@ -1389,7 +1384,7 @@ const BOT_OFF_TEXT = `
 বট এখন সাময়িকভাবে বন্ধ করা হয়েছে।
 
 🛠️ আবার চালু করতে:
-*/botone*
+*/boton*
 `;
 
 const BOT_ON_TEXT = `
@@ -2292,10 +2287,11 @@ async function startBot() {
 
           /* ===============================================
              BOT ON
+             Command: /boton
           =============================================== */
 
           if (
-            command === "/botone"
+            command === "/boton"
           ) {
             const admin =
               await isSenderAdmin(
@@ -2594,9 +2590,6 @@ async function startBot() {
 
           /* ===============================================
              ADMIN
-             
-             Group Owner + সকল Admin
-             @PhoneNumber = Real WhatsApp Mention
           =============================================== */
 
           if (
@@ -2643,10 +2636,6 @@ async function startBot() {
                     ? "⭐ *Group Owner*"
                     : "👑 *Admin*";
 
-                /*
-                 * Phone JID থাকলে
-                 * আসল WhatsApp clickable mention
-                 */
                 if (
                   isPhoneJid(jid) &&
                   !usedMentions.has(jid)
@@ -2704,10 +2693,6 @@ ${lines.join("\n\n")}
                   text:
                     adminText,
 
-                  /*
-                   * শুধু Phone JID যাবে।
-                   * LID সরাসরি mentions-এ যাবে না।
-                   */
                   mentions: [
                     ...new Set(
                       mentions.filter(
@@ -2862,4 +2847,4 @@ process.on(
    START
 ========================================================= */
 
-startboton
+startBot();
