@@ -1610,7 +1610,7 @@ ${
 
 
 ━━━━━━━━━━━━━━━━━━━━
-        🤖 *PIYAS BOT*
+        
 ━━━━━━━━━━━━━━━━━━━━
 `;
 }
@@ -1757,7 +1757,7 @@ ${commandStatus}
        👑 *ADMIN ONLY*
 ━━━━━━━━━━━━━━━━━━━━
 
-🤖 *PIYAS BOT*
+
 `;
 
     await sock.sendMessage(
@@ -1849,7 +1849,7 @@ ${
 👑 শুধুমাত্র Admin ও Owner
 এই Status দেখতে পারবেন।
 
-🤖 *PIYAS BOT*
+
 `;
 
   await sock.sendMessage(
@@ -1901,7 +1901,7 @@ Google Play Points সম্পর্কিত
 🤍 সবাই মিলে গ্রুপের
 পরিবেশ সুন্দর রাখুন।
 
-🤖 *PIYAS BOT*
+
 `;
 
 /* =========================================================
@@ -1954,7 +1954,7 @@ const PIYAS_INFO = `
 
 🤍 *Thank You*
 
-🤖 *PIYAS BOT*
+
 `;
 
 /* =========================================================
@@ -1973,7 +1973,7 @@ const BOT_OFF_TEXT = `
 
 🟢 /boton
 
-🤖 *PIYAS BOT*
+
 `;
 
 const BOT_ON_TEXT = `
@@ -3281,7 +3281,7 @@ async function startBot() {
 /on website
 /off website
 
-🤖 *PIYAS BOT*
+
 `
                     }
                   );
@@ -3332,7 +3332,7 @@ ${COMMAND_DEFINITIONS
   )
   .join("\n")}
 
-🤖 *PIYAS BOT*
+
 `
                     }
                   );
@@ -3389,7 +3389,7 @@ ${COMMAND_DEFINITIONS
 
 /on ${target}
 
-🤖 *PIYAS BOT*
+
 `
                     }
                   );
@@ -3450,7 +3450,7 @@ ${COMMAND_DEFINITIONS
 ✅ এখন থেকে এই Command
 আবার কাজ করবে।
 
-🤖 *PIYAS BOT*
+
 `
                     }
                   );
@@ -3671,7 +3671,7 @@ ${COMMAND_DEFINITIONS
 
 👥 *মোট Member:* ${participants.length} জন
 
-🤖 *PIYAS BOT*
+
 `
                   }
                 );
