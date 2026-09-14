@@ -15,36 +15,22 @@ import P from "pino";
    CONFIG
 ========================================================= */
 
-const PORT = Number(
-  process.env.PORT || 3000
-);
+const PORT = Number(process.env.PORT || 3000);
 
-const GROUP_IDS = (
-  process.env.GROUP_ID || ""
-)
+const GROUP_IDS = (process.env.GROUP_ID || "")
   .split(",")
   .map(v => v.trim())
   .filter(Boolean);
 
-const PHONE_NUMBER = (
-  process.env.PHONE_NUMBER || ""
-)
+const PHONE_NUMBER = (process.env.PHONE_NUMBER || "")
   .replace(/[^0-9]/g, "");
 
 const WEBSITE_URL =
   "https://x-cyber-2025.github.io/X-cyber.web/";
 
-const AUTH_DIR =
-  "./auth_info";
-
-const PAIRING_NUMBER_FILE =
-  "./pairing_number.txt";
-
-const BOT_STATUS_FILE =
-  "./bot_status.json";
-
-const COMMAND_STATUS_FILE =
-  "./command_status.json";
+const AUTH_DIR = "./auth_info";
+const PAIRING_NUMBER_FILE = "./pairing_number.txt";
+const BOT_STATUS_FILE = "./bot_status.json";
 
 let sock = null;
 let reconnecting = false;
@@ -57,69 +43,6 @@ const lidToPhoneJid = new Map();
 const logger = P({
   level: "silent"
 });
-
-
-/* =========================================================
-   ADMIN ONLY COMMANDS
-
-   সাধারণ Member এগুলো Menu-তে দেখতে পারবে না
-   এবং ব্যবহারও করতে পারবে না।
-========================================================= */
-
-const ADMIN_ONLY_COMMANDS = new Set([
-  "/botoff",
-  "/boton",
-  "/on",
-  "/off",
-  "/commandon",
-  "/commandoff",
-  "/cmdlist"
-]);
-
-
-/* =========================================================
-   PROTECTED COMMANDS
-
-   এগুলো /off দিয়ে বন্ধ করা যাবে না।
-========================================================= */
-
-const PROTECTED_COMMANDS = new Set([
-  "/botoff",
-  "/boton",
-  "/on",
-  "/off",
-  "/commandon",
-  "/commandoff",
-  "/cmdlist"
-]);
-
-
-/* =========================================================
-   DEFAULT COMMANDS
-========================================================= */
-
-const DEFAULT_COMMANDS = [
-  "/menu",
-  "/bot",
-  "/rules",
-  "/admin",
-  "/members",
-  "/groupinfo",
-  "/id",
-  "/ping",
-  "/deal",
-  "/ডিল",
-  "/piyas",
-  "/website",
-  "/botoff",
-  "/boton",
-  "/on",
-  "/off",
-  "/commandon",
-  "/commandoff",
-  "/cmdlist"
-];
-
 
 /* =========================================================
    BOT STATUS
@@ -134,18 +57,15 @@ function loadBotStatus() {
       return;
     }
 
-    const data = fs.readFileSync(
-      BOT_STATUS_FILE,
-      "utf8"
-    );
-
     botStatus =
-      JSON.parse(data) || {};
+      JSON.parse(
+        fs.readFileSync(
+          BOT_STATUS_FILE,
+          "utf8"
+        )
+      ) || {};
 
-    console.log(
-      "📂 Bot status loaded."
-    );
-
+    console.log("📂 Bot status loaded.");
   } catch (error) {
     console.log(
       "⚠️ Bot status load error:",
@@ -155,7 +75,6 @@ function loadBotStatus() {
     botStatus = {};
   }
 }
-
 
 function saveBotStatus() {
   try {
@@ -168,7 +87,6 @@ function saveBotStatus() {
       ),
       "utf8"
     );
-
   } catch (error) {
     console.log(
       "⚠️ Bot status save error:",
@@ -177,255 +95,107 @@ function saveBotStatus() {
   }
 }
 
+function getGroupStatus(groupId) {
+  if (!botStatus[groupId]) {
+    botStatus[groupId] = {
+      enabled: true,
+      disabledCommands: []
+    };
+  }
+
+  if (
+    !Array.isArray(
+      botStatus[groupId].disabledCommands
+    )
+  ) {
+    botStatus[groupId].disabledCommands = [];
+  }
+
+  return botStatus[groupId];
+}
 
 function isBotEnabled(groupId) {
   return (
-    botStatus[groupId] !== false
+    getGroupStatus(groupId).enabled !== false
   );
 }
-
 
 function setBotStatus(
   groupId,
   enabled
 ) {
-  botStatus[groupId] =
+  getGroupStatus(groupId).enabled =
     Boolean(enabled);
 
   saveBotStatus();
 }
 
-
-loadBotStatus();
-
-
-/* =========================================================
-   COMMAND STATUS
-========================================================= */
-
-let commandStatus = {};
-
-
-function loadCommandStatus() {
-  try {
-    if (
-      !fs.existsSync(
-        COMMAND_STATUS_FILE
-      )
-    ) {
-      commandStatus = {};
-      return;
-    }
-
-    const data =
-      fs.readFileSync(
-        COMMAND_STATUS_FILE,
-        "utf8"
-      );
-
-    commandStatus =
-      JSON.parse(data) || {};
-
-    console.log(
-      "📂 Command status loaded."
-    );
-
-  } catch (error) {
-    console.log(
-      "⚠️ Command status load error:",
-      error?.message
-    );
-
-    commandStatus = {};
-  }
-}
-
-
-function saveCommandStatus() {
-  try {
-    fs.writeFileSync(
-      COMMAND_STATUS_FILE,
-      JSON.stringify(
-        commandStatus,
-        null,
-        2
-      ),
-      "utf8"
-    );
-
-  } catch (error) {
-    console.log(
-      "⚠️ Command status save error:",
-      error?.message
-    );
-  }
-}
-
-
-loadCommandStatus();
-
-
-/* =========================================================
-   COMMAND NORMALIZER
-
-   admin      → /admin
-   /admin     → /admin
-   DEAL       → /deal
-========================================================= */
-
-function normalizeCommand(
-  command
-) {
+function normalizeCommandName(command) {
   if (!command) {
     return "";
   }
 
-  let value =
-    String(command)
-      .trim()
-      .toLowerCase();
-
-  if (
-    !value.startsWith("/")
-  ) {
-    value =
-      "/" + value;
-  }
-
-  return value;
+  return String(command)
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, "");
 }
-
-
-/* =========================================================
-   COMMAND STATUS CHECK
-========================================================= */
 
 function isCommandEnabled(
   groupId,
   command
 ) {
-  command =
-    normalizeCommand(
-      command
-    );
+  const name =
+    normalizeCommandName(command);
 
-  if (
-    !groupId ||
-    !command
-  ) {
+  if (!name) {
     return true;
   }
 
-  if (
-    !commandStatus[groupId]
-  ) {
-    return true;
-  }
-
-  return (
-    commandStatus[groupId][command] !==
-    false
+  return !getGroupStatus(
+    groupId
+  ).disabledCommands.includes(
+    name
   );
 }
-
-
-/* =========================================================
-   COMMAND STATUS SET
-========================================================= */
 
 function setCommandStatus(
   groupId,
   command,
   enabled
 ) {
-  command =
-    normalizeCommand(
-      command
-    );
+  const name =
+    normalizeCommandName(command);
 
-  if (
-    !groupId ||
-    !command
-  ) {
-    return;
+  if (!name) {
+    return false;
   }
 
-  if (
-    !commandStatus[groupId]
-  ) {
-    commandStatus[groupId] = {};
-  }
+  const status =
+    getGroupStatus(groupId);
 
-  commandStatus[groupId][command] =
-    Boolean(enabled);
+  const list =
+    status.disabledCommands;
 
-  saveCommandStatus();
-}
+  const index =
+    list.indexOf(name);
 
-
-/* =========================================================
-   ADMIN ONLY CHECK
-========================================================= */
-
-function isAdminOnlyCommand(
-  command
-) {
-  return ADMIN_ONLY_COMMANDS.has(
-    normalizeCommand(
-      command
-    )
-  );
-}
-
-
-/* =========================================================
-   PROTECTED CHECK
-========================================================= */
-
-function isProtectedCommand(
-  command
-) {
-  return PROTECTED_COMMANDS.has(
-    normalizeCommand(
-      command
-    )
-  );
-}
-
-
-/* =========================================================
-   GROUP COMMAND LIST
-========================================================= */
-
-function getGroupCommands(
-  groupId
-) {
-  const commands =
-    new Set(
-      DEFAULT_COMMANDS
-    );
-
-  const saved =
-    commandStatus[groupId];
-
-  if (saved) {
-    for (
-      const command of
-      Object.keys(saved)
-    ) {
-      commands.add(
-        normalizeCommand(
-          command
-        )
-      );
+  if (enabled) {
+    if (index !== -1) {
+      list.splice(index, 1);
+    }
+  } else {
+    if (index === -1) {
+      list.push(name);
     }
   }
 
-  return [
-    ...commands
-  ];
+  saveBotStatus();
+
+  return true;
 }
 
+loadBotStatus();
 
 /* =========================================================
    HTTP SERVER
@@ -434,11 +204,7 @@ function getGroupCommands(
 const server =
   http.createServer(
     (req, res) => {
-
-      if (
-        req.url ===
-        "/health"
-      ) {
+      if (req.url === "/health") {
         res.writeHead(
           200,
           {
@@ -449,15 +215,9 @@ const server =
 
         res.end(
           JSON.stringify({
-            status:
-              "online",
-
-            bot:
-              "WhatsApp Group Bot",
-
-            connected:
-              !!sock,
-
+            status: "online",
+            bot: "WhatsApp Group Bot",
+            connected: !!sock,
             groups:
               GROUP_IDS.length ||
               "ALL"
@@ -481,7 +241,6 @@ const server =
     }
   );
 
-
 server.listen(
   PORT,
   () => {
@@ -490,7 +249,6 @@ server.listen(
     );
   }
 );
-
 
 /* =========================================================
    PAIRING NUMBER
@@ -514,8 +272,8 @@ function readSavedPairingNumber() {
       .trim()
       .replace(
         /[^0-9]/g,
-        "");
-
+        ""
+      );
   } catch (error) {
     console.log(
       "⚠️ Pairing number read error:",
@@ -526,17 +284,13 @@ function readSavedPairingNumber() {
   }
 }
 
-
-function savePairingNumber(
-  number
-) {
+function savePairingNumber(number) {
   try {
     fs.writeFileSync(
       PAIRING_NUMBER_FILE,
       number,
       "utf8"
     );
-
   } catch (error) {
     console.log(
       "⚠️ Pairing number save error:",
@@ -544,7 +298,6 @@ function savePairingNumber(
     );
   }
 }
-
 
 function getCredentialPhoneNumber(
   creds
@@ -568,7 +321,6 @@ function getCredentialPhoneNumber(
     );
 }
 
-
 async function resetAuthForNumberChange() {
   try {
     if (
@@ -579,10 +331,8 @@ async function resetAuthForNumberChange() {
       await fs.promises.rm(
         AUTH_DIR,
         {
-          recursive:
-            true,
-          force:
-            true
+          recursive: true,
+          force: true
         }
       );
 
@@ -590,7 +340,6 @@ async function resetAuthForNumberChange() {
         "🗑️ Old WhatsApp session removed."
       );
     }
-
   } catch (error) {
     console.log(
       "❌ Failed to remove old session:",
@@ -599,14 +348,11 @@ async function resetAuthForNumberChange() {
   }
 }
 
-
 /* =========================================================
    JID HELPERS
 ========================================================= */
 
-function normalizeJid(
-  jid
-) {
+function normalizeJid(jid) {
   if (
     !jid ||
     typeof jid !== "string"
@@ -617,10 +363,7 @@ function normalizeJid(
   return jid.trim();
 }
 
-
-function isPhoneJid(
-  jid
-) {
+function isPhoneJid(jid) {
   return (
     typeof jid === "string" &&
     jid.endsWith(
@@ -629,22 +372,14 @@ function isPhoneJid(
   );
 }
 
-
-function isLidJid(
-  jid
-) {
+function isLidJid(jid) {
   return (
     typeof jid === "string" &&
-    jid.endsWith(
-      "@lid"
-    )
+    jid.endsWith("@lid")
   );
 }
 
-
-function phoneNumberToJid(
-  phone
-) {
+function phoneNumberToJid(phone) {
   if (!phone) {
     return null;
   }
@@ -667,28 +402,23 @@ function phoneNumberToJid(
   }
 
   return (
-    `${number}@s.whatsapp.net`
+    number +
+    "@s.whatsapp.net"
   );
 }
-
 
 /* =========================================================
    NAME HELPERS
 ========================================================= */
 
-function cleanName(
-  name
-) {
+function cleanName(name) {
   if (!name) {
     return null;
   }
 
   const value =
     String(name)
-      .replace(
-        /\s+/g,
-        " "
-      )
+      .replace(/\s+/g, " ")
       .trim();
 
   if (!value) {
@@ -700,7 +430,6 @@ function cleanName(
     80
   );
 }
-
 
 function getDisplayName(
   participant = {}
@@ -715,9 +444,7 @@ function getDisplayName(
     const id of ids
   ) {
     const cached =
-      contactNames.get(
-        id
-      );
+      contactNames.get(id);
 
     if (cached) {
       return cached;
@@ -758,9 +485,7 @@ function getDisplayName(
     }
   }
 
-  if (
-    participant.id
-  ) {
+  if (participant.id) {
     const idPart =
       String(
         participant.id
@@ -774,9 +499,8 @@ function getDisplayName(
   return "Member";
 }
 
-
 /* =========================================================
-   LID ↔ PHONE MAPPING
+   LID MAPPING
 ========================================================= */
 
 function saveLidMapping(
@@ -784,27 +508,19 @@ function saveLidMapping(
   pn
 ) {
   const lidJid =
-    normalizeJid(
-      lid
-    );
+    normalizeJid(lid);
 
   let phoneJid =
-    normalizeJid(
-      pn
-    );
+    normalizeJid(pn);
 
   if (
-    !isLidJid(
-      lidJid
-    )
+    !isLidJid(lidJid)
   ) {
     return;
   }
 
   if (
-    !isPhoneJid(
-      phoneJid
-    )
+    !isPhoneJid(phoneJid)
   ) {
     phoneJid =
       phoneNumberToJid(
@@ -813,9 +529,7 @@ function saveLidMapping(
   }
 
   if (
-    !isPhoneJid(
-      phoneJid
-    )
+    !isPhoneJid(phoneJid)
   ) {
     return;
   }
@@ -831,7 +545,6 @@ function saveLidMapping(
   );
 }
 
-
 async function resolveLidToPhoneJid(
   lid
 ) {
@@ -840,41 +553,30 @@ async function resolveLidToPhoneJid(
   }
 
   if (
-    isPhoneJid(
-      lid
-    )
+    isPhoneJid(lid)
   ) {
     return lid;
   }
 
   if (
-    !isLidJid(
-      lid
-    )
+    !isLidJid(lid)
   ) {
     return null;
   }
 
   const cached =
-    lidToPhoneJid.get(
-      lid
-    ) ||
-    contactPhoneJids.get(
-      lid
-    );
+    lidToPhoneJid.get(lid) ||
+    contactPhoneJids.get(lid);
 
   if (
-    isPhoneJid(
-      cached
-    )
+    isPhoneJid(cached)
   ) {
     return cached;
   }
 
   try {
     const mapping =
-      sock
-        ?.signalRepository
+      sock?.signalRepository
         ?.lidMapping;
 
     if (
@@ -888,13 +590,9 @@ async function resolveLidToPhoneJid(
         );
 
       const phoneJid =
-        isPhoneJid(
-          pn
-        )
+        isPhoneJid(pn)
           ? pn
-          : phoneNumberToJid(
-              pn
-            );
+          : phoneNumberToJid(pn);
 
       if (phoneJid) {
         saveLidMapping(
@@ -905,7 +603,6 @@ async function resolveLidToPhoneJid(
         return phoneJid;
       }
     }
-
   } catch (error) {
     console.log(
       "⚠️ LID → Phone mapping error:",
@@ -915,7 +612,6 @@ async function resolveLidToPhoneJid(
 
   return null;
 }
-
 
 /* =========================================================
    CONTACT CACHE
@@ -927,7 +623,6 @@ function saveContacts(
   for (
     const contact of contacts
   ) {
-
     if (!contact) {
       continue;
     }
@@ -942,8 +637,7 @@ function saveContacts(
         contact.lid
       );
 
-    let phoneJid =
-      null;
+    let phoneJid = null;
 
     if (
       contact.phoneNumber
@@ -960,19 +654,14 @@ function saveContacts(
 
     if (
       !phoneJid &&
-      isPhoneJid(
-        id
-      )
+      isPhoneJid(id)
     ) {
-      phoneJid =
-        id;
+      phoneJid = id;
     }
 
     if (
       phoneJid &&
-      isLidJid(
-        id
-      )
+      isLidJid(id)
     ) {
       saveLidMapping(
         id,
@@ -1000,7 +689,6 @@ function saveContacts(
       );
 
     if (name) {
-
       if (id) {
         contactNames.set(
           id,
@@ -1024,7 +712,6 @@ function saveContacts(
     }
 
     if (phoneJid) {
-
       if (id) {
         contactPhoneJids.set(
           id,
@@ -1046,7 +733,6 @@ function saveContacts(
     }
   }
 }
-
 
 /* =========================================================
    PHONE JID
@@ -1083,7 +769,6 @@ function getDirectPhoneJid(
   return null;
 }
 
-
 async function getPhoneJid(
   participant = {}
 ) {
@@ -1104,27 +789,18 @@ async function getPhoneJid(
   for (
     const id of ids
   ) {
-
     const cached =
-      contactPhoneJids.get(
-        id
-      ) ||
-      lidToPhoneJid.get(
-        id
-      );
+      contactPhoneJids.get(id) ||
+      lidToPhoneJid.get(id);
 
     if (
-      isPhoneJid(
-        cached
-      )
+      isPhoneJid(cached)
     ) {
       return cached;
     }
 
     if (
-      isLidJid(
-        id
-      )
+      isLidJid(id)
     ) {
       const resolved =
         await resolveLidToPhoneJid(
@@ -1140,14 +816,12 @@ async function getPhoneJid(
   return null;
 }
 
-
 async function cacheParticipants(
   participants = []
 ) {
   for (
     const participant of participants
   ) {
-
     if (!participant) {
       continue;
     }
@@ -1230,7 +904,6 @@ async function cacheParticipants(
       name &&
       name !== "Member"
     ) {
-
       if (participant.id) {
         contactNames.set(
           participant.id,
@@ -1255,32 +928,35 @@ async function cacheParticipants(
   }
 }
 
-
 /* =========================================================
    GROUP HELPERS
 ========================================================= */
+
+function isGroupAllowed(jid) {
+  if (
+    !jid ||
+    !jid.endsWith("@g.us")
+  ) {
+    return false;
+  }
+
+  return (
+    GROUP_IDS.length === 0 ||
+    GROUP_IDS.includes(jid)
+  );
+}
 
 function isAdminParticipant(
   participant = {}
 ) {
   return (
-    participant.admin ===
-      "admin" ||
-
-    participant.admin ===
-      "superadmin" ||
-
-    participant.admin ===
-      true ||
-
-    participant.isAdmin ===
-      true ||
-
-    participant.isSuperAdmin ===
-      true
+    participant.admin === "admin" ||
+    participant.admin === "superadmin" ||
+    participant.admin === true ||
+    participant.isAdmin === true ||
+    participant.isSuperAdmin === true
   );
 }
-
 
 function isOwnerParticipant(
   participant = {}
@@ -1288,33 +964,9 @@ function isOwnerParticipant(
   return (
     participant.admin ===
       "superadmin" ||
-
-    participant.isSuperAdmin ===
-      true
+    participant.isSuperAdmin === true
   );
 }
-
-
-function isGroupAllowed(
-  jid
-) {
-  if (
-    !jid ||
-    !jid.endsWith(
-      "@g.us"
-    )
-  ) {
-    return false;
-  }
-
-  return (
-    GROUP_IDS.length === 0 ||
-    GROUP_IDS.includes(
-      jid
-    )
-  );
-}
-
 
 function findParticipant(
   participants = [],
@@ -1334,7 +986,6 @@ function findParticipant(
   );
 }
 
-
 /* =========================================================
    ADMIN CHECK
 ========================================================= */
@@ -1344,7 +995,6 @@ async function isSenderAdmin(
   message
 ) {
   try {
-
     const participantJid =
       message?.key?.participant;
 
@@ -1358,8 +1008,7 @@ async function isSenderAdmin(
       );
 
     const participants =
-      metadata?.participants ||
-      [];
+      metadata?.participants || [];
 
     await cacheParticipants(
       participants
@@ -1372,14 +1021,12 @@ async function isSenderAdmin(
       );
 
     if (!sender) {
-
       const senderPhone =
         await resolveLidToPhoneJid(
           participantJid
         );
 
       if (senderPhone) {
-
         sender =
           findParticipant(
             participants,
@@ -1389,7 +1036,6 @@ async function isSenderAdmin(
     }
 
     if (!sender) {
-
       sender =
         participants.find(
           participant =>
@@ -1408,7 +1054,6 @@ async function isSenderAdmin(
     );
 
   } catch (error) {
-
     console.log(
       "⚠️ Admin check error:",
       error?.message
@@ -1418,510 +1063,489 @@ async function isSenderAdmin(
   }
 }
 
-
 /* =========================================================
-   ADMIN DATA
+   COMMAND LIST
 ========================================================= */
 
-async function getAdminData(
-  remoteJid
-) {
-  try {
-
-    if (!sock) {
-      return {
-        admins: [],
-        result: []
-      };
-    }
-
-    const metadata =
-      await sock.groupMetadata(
-        remoteJid
-      );
-
-    const participants =
-      metadata?.participants ||
-      [];
-
-    await cacheParticipants(
-      participants
-    );
-
-    const adminParticipants =
-      participants.filter(
-        participant =>
-          isAdminParticipant(
-            participant
-          )
-      );
-
-    const result = [];
-    const usedJids =
-      new Set();
-
-    for (
-      const participant of
-      adminParticipants
-    ) {
-
-      if (!participant) {
-        continue;
-      }
-
-      let phoneJid =
-        await getPhoneJid(
-          participant
-        );
-
-      if (
-        !phoneJid &&
-        participant.phoneNumber
-      ) {
-        phoneJid =
-          phoneNumberToJid(
-            participant.phoneNumber
-          );
-      }
-
-      if (
-        !phoneJid &&
-        isPhoneJid(
-          participant.id
-        )
-      ) {
-        phoneJid =
-          participant.id;
-      }
-
-      if (
-        !phoneJid &&
-        isLidJid(
-          participant.id
-        )
-      ) {
-        phoneJid =
-          await resolveLidToPhoneJid(
-            participant.id
-          );
-      }
-
-      if (
-        !phoneJid &&
-        isLidJid(
-          participant.lid
-        )
-      ) {
-        phoneJid =
-          await resolveLidToPhoneJid(
-            participant.lid
-          );
-      }
-
-      let name =
-        getDisplayName(
-          participant
-        );
-
-      if (
-        !name ||
-        name === "Member"
-      ) {
-        name =
-          "Admin";
-      }
-
-      name =
-        String(name)
-          .replace(
-            /@/g,
-            ""
-          )
-          .trim();
-
-      if (phoneJid) {
-
-        if (participant.id) {
-          contactPhoneJids.set(
-            participant.id,
-            phoneJid
-          );
-        }
-
-        if (participant.lid) {
-          contactPhoneJids.set(
-            participant.lid,
-            phoneJid
-          );
-        }
-
-        if (
-          isLidJid(
-            participant.id
-          )
-        ) {
-          saveLidMapping(
-            participant.id,
-            phoneJid
-          );
-        }
-
-        if (
-          isLidJid(
-            participant.lid
-          )
-        ) {
-          saveLidMapping(
-            participant.lid,
-            phoneJid
-          );
-        }
-      }
-
-      if (
-        phoneJid &&
-        usedJids.has(
-          phoneJid
-        )
-      ) {
-        continue;
-      }
-
-      if (phoneJid) {
-        usedJids.add(
-          phoneJid
-        );
-      }
-
-      result.push({
-        jid:
-          phoneJid ||
-          participant.id ||
-          participant.lid ||
-          null,
-
-        name,
-
-        owner:
-          isOwnerParticipant(
-            participant
-          )
-      });
-    }
-
-    return {
-      admins: result,
-      result
-    };
-
-  } catch (error) {
-
-    console.log(
-      "❌ getAdminData error:",
-      error?.message
-    );
-
-    return {
-      admins: [],
-      result: []
-    };
+const COMMAND_DEFINITIONS = [
+  {
+    key: "menu",
+    command: "/menu",
+    title: "Main Menu",
+    category: "group"
+  },
+  {
+    key: "bot",
+    command: "/bot",
+    title: "Bot Menu",
+    category: "group"
+  },
+  {
+    key: "rules",
+    command: "/rules",
+    title: "Group Rules",
+    category: "group"
+  },
+  {
+    key: "admin",
+    command: "/admin",
+    title: "Admin List",
+    category: "group"
+  },
+  {
+    key: "members",
+    command: "/members",
+    title: "Group Members",
+    category: "group"
+  },
+  {
+    key: "groupinfo",
+    command: "/groupinfo",
+    title: "Group Info",
+    category: "group"
+  },
+  {
+    key: "id",
+    command: "/id",
+    title: "Group ID",
+    category: "group"
+  },
+  {
+    key: "ping",
+    command: "/ping",
+    title: "Ping",
+    category: "utility"
+  },
+  {
+    key: "deal",
+    command: "/deal",
+    title: "Buy / Sell Deal",
+    category: "deal"
+  },
+  {
+    key: "piyas",
+    command: "/piyas",
+    title: "Piyas Info",
+    category: "piyas"
+  },
+  {
+    key: "website",
+    command: "/website",
+    title: "Official Website",
+    category: "website"
   }
-}
-
-
-/* =========================================================
-   MESSAGE TEXT
-========================================================= */
-
-function getMessageText(
-  message
-) {
-  const msg =
-    message?.message;
-
-  if (!msg) {
-    return "";
-  }
-
-  return (
-    msg.conversation ||
-    msg.extendedTextMessage?.text ||
-    msg.imageMessage?.caption ||
-    msg.videoMessage?.caption ||
-    msg.documentMessage?.caption ||
-    ""
-  ).trim();
-}
-
+];
 
 /* =========================================================
    COPY BUTTON
-=========================================================
-
-   copy_code-এর মধ্যে পুরো Command রাখা হচ্ছে।
-
-   যেমন:
-
-   /admin
-
-   /deal
-
-   /on admin
-
-   /off admin
-
-   ফলে Copy করলে "/" সহ copy হবে।
 ========================================================= */
 
-async function sendCopyButton(
-  remoteJid,
-  command,
-  label = "📋 COPY"
+function makeCopyButton(
+  command
 ) {
-  const copyCommand =
-    String(command || "")
-      .trim();
-
-  if (!copyCommand) {
-    return;
-  }
-
-  try {
-
-    await sock.sendMessage(
-      remoteJid,
-      {
-        text:
-          `⚙️ *${copyCommand}*`,
-
-        footer:
-          "🤖 PIYAS BOT",
-
-        buttons: [
-          {
-            name:
-              "cta_copy",
-
-            buttonParamsJson:
-              JSON.stringify({
-                display_text:
-                  label,
-
-                id:
-                  `copy_${Date.now()}_${Math.random()
-                    .toString(36)
-                    .slice(2)}`,
-
-                copy_code:
-                  copyCommand
-              })
-          }
-        ]
-      }
-    );
-
-  } catch (error) {
-
-    console.log(
-      "⚠️ Copy button error:",
-      error?.message
-    );
-
-    try {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            `📋 *COPY COMMAND*\n\n${copyCommand}`
-        }
-      );
-
-    } catch {}
-  }
+  return {
+    name: "cta_copy",
+    buttonParamsJson:
+      JSON.stringify({
+        display_text: "📋 Copy",
+        id:
+          "copy_" +
+          normalizeCommandName(
+            command
+          ),
+        copy_code: command
+      })
+  };
 }
 
-
 /* =========================================================
-   MENU
+   PUBLIC BOT MENU
 ========================================================= */
 
-async function sendMenu(
-  remoteJid,
-  isAdmin
+function buildMenuText(
+  remoteJid
 ) {
-  try {
-
-    const commands =
-      getGroupCommands(
-        remoteJid
+  const isEnabled =
+    key =>
+      isCommandEnabled(
+        remoteJid,
+        key
       );
 
-    const visibleCommands =
-      [];
-
-    for (
-      const command of commands
-    ) {
-
-      /*
-         Admin-only command
-         সাধারণ Member দেখতে পাবে না।
-      */
-
-      if (
-        isAdminOnlyCommand(
-          command
-        ) &&
-        !isAdmin
-      ) {
-        continue;
-      }
-
-      /*
-         OFF command
-         সাধারণ Member দেখতে পাবে না।
-
-         Admin দেখতে পারবে।
-      */
-
-      if (
-        !isCommandEnabled(
-          remoteJid,
-          command
-        ) &&
-        !isAdmin
-      ) {
-        continue;
-      }
-
-      visibleCommands.push(
-        command
-      );
+  const group = [
+    {
+      number: "1️⃣",
+      key: "menu",
+      command: "/menu"
+    },
+    {
+      number: "2️⃣",
+      key: "bot",
+      command: "/bot"
+    },
+    {
+      number: "3️⃣",
+      key: "rules",
+      command: "/rules"
+    },
+    {
+      number: "4️⃣",
+      key: "admin",
+      command: "/admin"
+    },
+    {
+      number: "5️⃣",
+      key: "members",
+      command: "/members"
+    },
+    {
+      number: "6️⃣",
+      key: "groupinfo",
+      command: "/groupinfo"
+    },
+    {
+      number: "7️⃣",
+      key: "id",
+      command: "/id"
     }
+  ].filter(
+    item =>
+      isEnabled(
+        item.key
+      )
+  );
 
+  const utility = [
+    {
+      number: "8️⃣",
+      key: "ping",
+      command: "/ping"
+    }
+  ].filter(
+    item =>
+      isEnabled(
+        item.key
+      )
+  );
 
-    let text = `
+  const deal = isEnabled("deal")
+    ? "│ 9️⃣ /deal /ডিল"
+    : "│ 🔴 Deal Command OFF";
+
+  const piyas = isEnabled("piyas")
+    ? "│ 🔟 /piyas"
+    : "│ 🔴 Piyas Command OFF";
+
+  const website = isEnabled("website")
+    ? "│ 1️⃣1️⃣ /website"
+    : "│ 🔴 Website Command OFF";
+
+  return `
 ╭━━━━━━━━━━━━━━━━━━━━╮
         🤖 *BOT MENU*
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-`;
-
-    let number = 1;
-
-
-    for (
-      const command of
-      visibleCommands
-    ) {
-
-      if (
-        ADMIN_ONLY_COMMANDS.has(
-          command
+╭─❖ 👥 *GROUP COMMANDS*
+│
+${
+  group.length
+    ? group
+        .map(
+          item =>
+            `│ ${item.number} ${item.command}`
         )
-      ) {
-        continue;
-      }
+        .join("\n")
+    : "│ ❌ কোনো Command চালু নেই"
+}
+╰────────────────────
 
-      text +=
-        `${number}️⃣ ${command}\n`;
+╭─❖ ⚙️ *UTILITY*
+│
+${
+  utility.length
+    ? utility
+        .map(
+          item =>
+            `│ ${item.number} ${item.command}`
+        )
+        .join("\n")
+    : "│ ❌ কোনো Command চালু নেই"
+}
+╰────────────────────
 
-      number++;
-    }
+╭─❖ 💰 *BUY / SELL*
+│
+${deal}
+╰────────────────────
+
+╭─❖ 🤍 *PIYAS*
+│
+${piyas}
+╰────────────────────
+
+╭─❖ 🌐 *OUR WEBSITE*
+│
+${website}
+╰────────────────────
 
 
-    if (isAdmin) {
-
-      text += `
 ━━━━━━━━━━━━━━━━━━━━
-
-👑 *ADMIN CONTROL*
-
-🔴 /botoff
-🟢 /boton
-
-🟢 /on command
-🔴 /off command
-
-📋 /cmdlist
-
+        🤖 *PIYAS BOT*
 ━━━━━━━━━━━━━━━━━━━━
 `;
-    }
+}
 
-
-    text += `
-🤖 *PIYAS BOT*
-`;
-
-
-    await sock.sendMessage(
-      remoteJid,
-      {
-        text
-      }
-    );
-
+async function sendPublicMenu(
+  remoteJid
+) {
+  try {
+    const text =
+      buildMenuText(
+        remoteJid
+      );
 
     /*
-       Command-এর পাশে/নিচে Copy button।
-       Copy code-এ "/" সহ পুরো command থাকবে।
-    */
+     * IMPORTANT:
+     *
+     * WhatsApp/Baileys-এর সব version-এ
+     * cta_copy button একইভাবে support নাও করতে পারে।
+     *
+     * তাই আগে native copy button পাঠানোর চেষ্টা করা হচ্ছে।
+     * ব্যর্থ হলে সুন্দর menu text-ই পাঠাবে।
+     */
 
-    for (
-      const command of
-      visibleCommands
-    ) {
+    const copyCommands =
+      COMMAND_DEFINITIONS
+        .filter(item =>
+          isCommandEnabled(
+            remoteJid,
+            item.key
+          )
+        )
+        .map(
+          item =>
+            item.command
+        );
 
-      await sendCopyButton(
+    try {
+      await sock.sendMessage(
         remoteJid,
-        command
-      );
-    }
-
-
-    /*
-       Admin-এর জন্য Control Command
-    */
-
-    if (isAdmin) {
-
-      await sendCopyButton(
-        remoteJid,
-        "/on admin"
-      );
-
-      await sendCopyButton(
-        remoteJid,
-        "/off admin"
-      );
-
-      await sendCopyButton(
-        remoteJid,
-        "/on deal"
-      );
-
-      await sendCopyButton(
-        remoteJid,
-        "/off deal"
+        {
+          text,
+          buttons:
+            copyCommands.map(
+              command =>
+                makeCopyButton(
+                  command
+                )
+            )
+        }
       );
 
-      await sendCopyButton(
+    } catch (buttonError) {
+      console.log(
+        "⚠️ Copy buttons unsupported:",
+        buttonError?.message
+      );
+
+      await sock.sendMessage(
         remoteJid,
-        "/cmdlist"
+        {
+          text
+        }
       );
     }
 
   } catch (error) {
-
     console.log(
-      "❌ Menu error:",
+      "❌ Public menu error:",
       error?.message
     );
   }
 }
 
+/* =========================================================
+   ADMIN PANEL
+========================================================= */
+
+async function sendAdminPanel(
+  remoteJid
+) {
+  try {
+    const disabled =
+      getGroupStatus(
+        remoteJid
+      ).disabledCommands || [];
+
+    const commandStatus =
+      COMMAND_DEFINITIONS
+        .map(item => {
+          const enabled =
+            !disabled.includes(
+              item.key
+            );
+
+          return (
+            `│ ${
+              enabled
+                ? "🟢"
+                : "🔴"
+            } ${item.command}`
+          );
+        })
+        .join("\n");
+
+    const text = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       👑 *ADMIN PANEL*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+🔐 *শুধুমাত্র Admin ও Owner-এর জন্য*
+
+╭─❖ 🤖 *BOT STATUS*
+│
+│ ${
+      isBotEnabled(remoteJid)
+        ? "🟢 Bot: ON"
+        : "🔴 Bot: OFF"
+    }
+╰────────────────────
+
+╭─❖ ⚙️ *COMMAND STATUS*
+│
+${commandStatus}
+╰────────────────────
+
+╭─❖ 🛠️ *BOT CONTROL*
+│
+│ 🟢 /boton
+│ 🔴 /botoff
+╰────────────────────
+
+╭─❖ ⚙️ *COMMAND CONTROL*
+│
+│ 🟢 /on <command>
+│ 🔴 /off <command>
+│ 📋 /cmdlist
+╰────────────────────
+
+╭─❖ 💡 *EXAMPLE*
+│
+│ 🔴 /off admin
+│ 🟢 /on admin
+│
+│ 🔴 /off deal
+│ 🟢 /on deal
+│
+│ 🔴 /off rules
+│ 🟢 /on rules
+│
+│ 🔴 /off website
+│ 🟢 /on website
+╰────────────────────
+
+━━━━━━━━━━━━━━━━━━━━
+       👑 *ADMIN ONLY*
+━━━━━━━━━━━━━━━━━━━━
+
+🤖 *PIYAS BOT*
+`;
+
+    const buttons = [
+      "/boton",
+      "/botoff",
+      "/on admin",
+      "/off admin",
+      "/cmdlist"
+    ].map(
+      command =>
+        makeCopyButton(
+          command
+        )
+    );
+
+    try {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text,
+          buttons
+        }
+      );
+    } catch {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text
+        }
+      );
+    }
+
+  } catch (error) {
+    console.log(
+      "❌ Admin panel error:",
+      error?.message
+    );
+  }
+}
+
+/* =========================================================
+   COMMAND STATUS
+========================================================= */
+
+async function sendCommandList(
+  remoteJid
+) {
+  const disabled =
+    getGroupStatus(
+      remoteJid
+    ).disabledCommands || [];
+
+  const lines =
+    COMMAND_DEFINITIONS
+      .map(item => {
+        const enabled =
+          !disabled.includes(
+            item.key
+          );
+
+        return (
+          `${enabled ? "🟢" : "🔴"} ${item.command}`
+        );
+      })
+      .join("\n");
+
+  const text = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+      📋 *COMMAND STATUS*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+${lines}
+
+━━━━━━━━━━━━━━━━━━━━
+
+🤖 *Bot Status:*
+${
+  isBotEnabled(remoteJid)
+    ? "🟢 ON"
+    : "🔴 OFF"
+}
+
+━━━━━━━━━━━━━━━━━━━━
+
+👑 শুধুমাত্র Admin ও Owner
+এই Status দেখতে পারবেন।
+
+🤍 *Piyas*
+`;
+
+  await sock.sendMessage(
+    remoteJid,
+    {
+      text
+    }
+  );
+}
 
 /* =========================================================
    RULES
@@ -1957,14 +1581,13 @@ Google Play Points সম্পর্কিত
 পরিবেশ সুন্দর রাখুন।
 `;
 
-
 /* =========================================================
    WEBSITE
 ========================================================= */
 
 const WEBSITE_TEXT = `
 ╭━━━━━━━━━━━━━━━━━━━━╮
-      🌐 *Our Official Website*
+      🌐 *OUR WEBSITE*
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
 🌐 *Official Website:*
@@ -1979,6 +1602,388 @@ Google Play Points এবং
 🤍 *Piyas*
 `;
 
+/* =========================================================
+   PIYAS
+========================================================= */
+
+const PIYAS_INFO = `
+╭━━━━━━━━━━━━━━━━━━╮
+       🤍 *PIYAS*
+╰━━━━━━━━━━━━━━━━━━╯
+
+☪️ *আমার সবচেয়ে বড় পরিচয়: আমি একজন মুসলিম এবং মহানবী হযরত মুহাম্মাদ (সা.)-এর উম্মত।* 🤍
+
+👤 *Name:* মোঃ আল আমিন
+🌐 *English Name:* MD. AL AMIN
+
+👨‍👦 *Father:* মোঃ মোশারফ হোসেন
+👩‍👦 *Mother:* মোসাম্মৎ রীপা বেগম
+
+🎂 *Date of Birth:* ০৯ জানুয়ারি ২০০৬
+🩸 *Blood Group:* A+
+
+💍 *Marital Status:* Unmarried
+
+🏠 *Address:*
+গ্রাম/রাস্তা: বলদার চর, নান্দাইল
+ডাকঘর: হেমগঞ্জ বাজার - ২২৯০
+নান্দাইল, ময়মনসিংহ
+
+🤍 *Thank You*
+`;
+
+/* =========================================================
+   BOT STATUS
+========================================================= */
+
+const BOT_OFF_TEXT = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       🔴 *BOT OFF*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+বট এখন সাময়িকভাবে বন্ধ করা হয়েছে।
+
+👑 শুধুমাত্র Admin / Owner
+আবার চালু করতে পারবেন।
+
+🟢 /boton
+
+🤖 *PIYAS BOT*
+`;
+
+const BOT_ON_TEXT = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🟢 *BOT ON*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+বট এখন পুনরায় চালু করা হয়েছে। ✅
+
+🤖 এখন সব Command ব্যবহার করা যাবে।
+
+🤍 *Piyas*
+`;
+
+const BOT_ALREADY_OFF_TEXT = `
+🔴 *BOT STATUS*
+
+বট ইতোমধ্যে OFF আছে।
+`;
+
+const BOT_ALREADY_ON_TEXT = `
+🟢 *BOT STATUS*
+
+বট ইতোমধ্যে ON আছে।
+`;
+
+/* =========================================================
+   DEAL
+========================================================= */
+
+const DEAL_NOTICE_TOP = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🤝 *DEAL NOTICE*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+⚠️ *গুরুত্বপূর্ণ সতর্কতা!*
+
+কোনো ধরনের Account Buy/Sell,
+Google Play Points অথবা অন্য
+কোনো Deal করার আগে অবশ্যই
+Group-এর Admin-এর সাথে
+যোগাযোগ করুন।
+
+🚫 *Admin ছাড়া কারো সাথে
+কোনো Deal করবেন না।*
+
+⚠️ Admin-এর অনুমতি ছাড়া
+কোনো Deal করলে তার সম্পূর্ণ
+দায়ভার সংশ্লিষ্ট ব্যক্তির।
+
+❌ Admin ছাড়া করা কোনো Deal-এর
+জন্য Group Admin কোনোভাবেই
+দায়ী থাকবে না।
+
+👑 *Deal করার জন্য Group Admin:*
+
+`;
+
+const DEAL_NOTICE_BOTTOM = `
+📌 নিরাপদ থাকতে সবসময়
+Admin-এর মাধ্যমে Deal করুন।
+
+🤍 *PIYAS*
+`;
+
+/* =========================================================
+   ADMIN DATA
+========================================================= */
+
+async function getAdminData(
+  remoteJid
+) {
+  try {
+    const metadata =
+      await sock.groupMetadata(
+        remoteJid
+      );
+
+    const participants =
+      metadata?.participants || [];
+
+    await cacheParticipants(
+      participants
+    );
+
+    const adminParticipants =
+      participants.filter(
+        isAdminParticipant
+      );
+
+    const result = [];
+    const usedJids = new Set();
+
+    for (
+      const participant of adminParticipants
+    ) {
+      let phoneJid =
+        await getPhoneJid(
+          participant
+        );
+
+      let name =
+        getDisplayName(
+          participant
+        );
+
+      if (
+        !name ||
+        name === "Member"
+      ) {
+        name = "Admin";
+      }
+
+      if (
+        phoneJid &&
+        usedJids.has(
+          phoneJid
+        )
+      ) {
+        continue;
+      }
+
+      if (phoneJid) {
+        usedJids.add(
+          phoneJid
+        );
+      }
+
+      result.push({
+        jid:
+          phoneJid ||
+          participant.id ||
+          participant.lid ||
+          null,
+        name,
+        owner:
+          isOwnerParticipant(
+            participant
+          )
+      });
+    }
+
+    return {
+      admins: result,
+      result
+    };
+
+  } catch (error) {
+    console.log(
+      "❌ getAdminData error:",
+      error?.message
+    );
+
+    return {
+      admins: [],
+      result: []
+    };
+  }
+}
+
+/* =========================================================
+   ADMIN LIST
+========================================================= */
+
+async function sendAdminList(
+  remoteJid
+) {
+  const {
+    admins
+  } =
+    await getAdminData(
+      remoteJid
+    );
+
+  if (!admins.length) {
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text:
+          "👑 এই গ্রুপে কোনো Admin পাওয়া যায়নি।"
+      }
+    );
+
+    return;
+  }
+
+  const lines = [];
+  const mentions = [];
+
+  let number = 1;
+
+  for (
+    const admin of admins
+  ) {
+    const role =
+      admin.owner
+        ? "⭐ *Group Owner*"
+        : "👑 *Admin*";
+
+    if (
+      isPhoneJid(
+        admin.jid
+      )
+    ) {
+      const phone =
+        admin.jid
+          .split("@")[0]
+          .replace(
+            /[^0-9]/g,
+            ""
+          );
+
+      mentions.push(
+        admin.jid
+      );
+
+      lines.push(
+        `${number}️⃣ @${phone} ${role}`
+      );
+    } else {
+      lines.push(
+        `${number}️⃣ ${admin.name} ${role}`
+      );
+    }
+
+    number++;
+  }
+
+  const text = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       👑 *GROUP ADMINS*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+${lines.join("\n\n")}
+
+━━━━━━━━━━━━━━━━━━━━
+
+👥 *মোট Admin:* ${admins.length} জন
+
+🤍 *Piyas*
+`;
+
+  await sock.sendMessage(
+    remoteJid,
+    {
+      text,
+      mentions
+    }
+  );
+}
+
+/* =========================================================
+   DEAL MESSAGE
+========================================================= */
+
+async function sendDealNotice(
+  remoteJid
+) {
+  const {
+    admins
+  } =
+    await getAdminData(
+      remoteJid
+    );
+
+  if (!admins.length) {
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text:
+          DEAL_NOTICE_TOP +
+          "⚠️ বর্তমানে কোনো Admin পাওয়া যায়নি.\n\n" +
+          DEAL_NOTICE_BOTTOM
+      }
+    );
+
+    return;
+  }
+
+  const lines = [];
+  const mentions = [];
+
+  let number = 1;
+
+  for (
+    const admin of admins
+  ) {
+    const role =
+      admin.owner
+        ? "⭐ *Group Owner*"
+        : "👑 *Admin*";
+
+    if (
+      isPhoneJid(
+        admin.jid
+      )
+    ) {
+      const phone =
+        admin.jid
+          .split("@")[0]
+          .replace(
+            /[^0-9]/g,
+            ""
+          );
+
+      mentions.push(
+        admin.jid
+      );
+
+      lines.push(
+        `${number}️⃣ @${phone} ${role}`
+      );
+    } else {
+      lines.push(
+        `${number}️⃣ ${admin.name} ${role}`
+      );
+    }
+
+    number++;
+  }
+
+  const text =
+    DEAL_NOTICE_TOP +
+    lines.join("\n\n") +
+    `\n\n👥 *মোট Admin:* ${admins.length} জন\n\n` +
+    DEAL_NOTICE_BOTTOM;
+
+  await sock.sendMessage(
+    remoteJid,
+    {
+      text,
+      mentions
+    }
+  );
+}
 
 /* =========================================================
    WELCOME
@@ -2026,301 +2031,25 @@ ${WEBSITE_URL}
 `;
 }
 
-
-/* =========================================================
-   PIYAS
-========================================================= */
-
-const PIYAS_INFO = `
-╭━━━━━━━━━━━━━━━━━━╮
-       🤍 *PIYAS*
-╰━━━━━━━━━━━━━━━━━━╯
-
-☪️ *আমার সবচেয়ে বড় পরিচয়: আমি একজন মুসলিম এবং মহানবী হযরত মুহাম্মাদ (সা.)-এর উম্মত।* 🤍
-
-👤 *Name:* মোঃ আল আমিন
-🌐 *English Name:* MD. AL AMIN
-
-👨‍👦 *Father:* মোঃ মোশারফ হোসেন
-👩‍👦 *Mother:* মোসাম্মৎ রীপা বেগম
-
-🎂 *Date of Birth:* ০৯ জানুয়ারি ২০০৬
-🩸 *Blood Group:* A+
-
-💍 *Marital Status:* Unmarried
-
-🏠 *Address:*
-গ্রাম/রাস্তা: বলদার চর, নান্দাইল
-ডাকঘর: হেমগঞ্জ বাজার - ২২৯০
-নান্দাইল, ময়মনসিংহ
-
-🤍 *Thank You*
-`;
-
-
-/* =========================================================
-   DEAL
-========================================================= */
-
-const DEAL_NOTICE_TOP = `
-╭━━━━━━━━━━━━━━━━━━━━╮
-        🤝 *DEAL NOTICE*
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-⚠️ *গুরুত্বপূর্ণ সতর্কতা!*
-
-কোনো ধরনের Account Buy/Sell,
-Google Play Points অথবা অন্য
-কোনো Deal করার আগে অবশ্যই
-Group-এর Admin-এর সাথে
-যোগাযোগ করুন।
-
-🚫 *Admin ছাড়া কারো সাথে
-কোনো Deal করবেন না।*
-
-⚠️ Admin-এর অনুমতি ছাড়া
-কোনো Deal করলে তার সম্পূর্ণ
-দায়ভার সংশ্লিষ্ট ব্যক্তির।
-
-❌ Admin ছাড়া করা কোনো Deal-এর
-জন্য Group Admin কোনোভাবেই
-দায়ী থাকবে না।
-
-👑 *Deal করার জন্য Group Admin:*
-
-`;
-
-
-const DEAL_NOTICE_BOTTOM = `
-📌 নিরাপদ থাকতে সবসময়
-Admin-এর মাধ্যমে Deal করুন।
-
-🤍 *PIYAS*
-`;
-
-
-/* =========================================================
-   BOT CONTROL
-========================================================= */
-
-const BOT_OFF_TEXT = `
-🔴 *BOT OFF*
-
-বট এখন সাময়িকভাবে বন্ধ করা হয়েছে।
-
-🛠️ আবার চালু করতে:
-*/boton*
-`;
-
-
-const BOT_ON_TEXT = `
-🟢 *BOT ON*
-
-বট এখন পুনরায় চালু করা হয়েছে। ✅
-
-🤖 এখন সব Command ব্যবহার করা যাবে।
-`;
-
-
-const BOT_ALREADY_OFF_TEXT = `
-🔴 *BOT STATUS*
-
-বট ইতোমধ্যে OFF আছে।
-`;
-
-
-const BOT_ALREADY_ON_TEXT = `
-🟢 *BOT STATUS*
-
-বট ইতোমধ্যে ON আছে।
-`;
-
-
-/* =========================================================
-   DEAL NOTICE
-========================================================= */
-
-async function sendDealNotice(
-  remoteJid
-) {
-  try {
-
-    if (!sock) {
-      return;
-    }
-
-    const {
-      admins,
-      result
-    } =
-      await getAdminData(
-        remoteJid
-      );
-
-
-    if (!admins.length) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            DEAL_NOTICE_TOP +
-            "⚠️ বর্তমানে কোনো Admin পাওয়া যায়নি.\n\n" +
-            DEAL_NOTICE_BOTTOM
-        }
-      );
-
-      return;
-    }
-
-
-    const lines = [];
-    const mentions = [];
-    const usedJids =
-      new Set();
-
-    let number = 1;
-
-
-    for (
-      const admin of result
-    ) {
-
-      const name =
-        admin.name ||
-        "Admin";
-
-      const jid =
-        admin.jid;
-
-      const role =
-        admin.owner
-          ? "⭐ *Group Owner*"
-          : "👑 *Admin*";
-
-
-      if (
-        isPhoneJid(
-          jid
-        ) &&
-        !usedJids.has(
-          jid
-        )
-      ) {
-
-        usedJids.add(
-          jid
-        );
-
-        mentions.push(
-          jid
-        );
-
-        const phone =
-          jid
-            .split("@")[0]
-            .replace(
-              /[^0-9]/g,
-              ""
-            );
-
-        lines.push(
-          `${number}️⃣ @${phone} ${role}`
-        );
-
-      } else {
-
-        lines.push(
-          `${number}️⃣ ${name} ${role}`
-        );
-      }
-
-      number++;
-    }
-
-
-    const text =
-      DEAL_NOTICE_TOP +
-      lines.join(
-        "\n\n"
-      ) +
-      `\n\n👥 *মোট Admin:* ${admins.length} জন\n\n` +
-      DEAL_NOTICE_BOTTOM;
-
-
-    await sock.sendMessage(
-      remoteJid,
-      {
-        text,
-
-        mentions: [
-          ...new Set(
-            mentions.filter(
-              isPhoneJid
-            )
-          )
-        ]
-      }
-    );
-
-
-    console.log(
-      `🤝 Deal notice sent | Admins: ${admins.length} | Clickable mentions: ${mentions.length}`
-    );
-
-  } catch (error) {
-
-    console.log(
-      "❌ Deal notice error:",
-      error?.message
-    );
-
-    try {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            DEAL_NOTICE_TOP +
-            "⚠️ Admin list আনতে সমস্যা হয়েছে.\n\n" +
-            DEAL_NOTICE_BOTTOM
-        }
-      );
-
-    } catch {}
-  }
-}
-
-
-/* =========================================================
-   WELCOME
-========================================================= */
-
 async function sendWelcome(
   groupId,
   participant
 ) {
   try {
-
-    if (!sock) {
-      return;
-    }
-
     if (
-      !isBotEnabled(
-        groupId
+      !sock ||
+      !isBotEnabled(groupId) ||
+      !isCommandEnabled(
+        groupId,
+        "welcome"
       )
     ) {
       return;
     }
 
-
-    let metadata =
-      null;
-
+    let metadata = null;
 
     try {
-
       metadata =
         await sock.groupMetadata(
           groupId
@@ -2330,9 +2059,7 @@ async function sendWelcome(
         metadata?.participants ||
           []
       );
-
     } catch {}
-
 
     let member =
       findParticipant(
@@ -2341,9 +2068,7 @@ async function sendWelcome(
         participant?.id
       );
 
-
     if (!member) {
-
       member =
         findParticipant(
           metadata?.participants ||
@@ -2352,31 +2077,23 @@ async function sendWelcome(
         );
     }
 
-
     if (!member) {
-      member =
-        participant;
+      member = participant;
     }
-
 
     const name =
       getDisplayName(
         member
       );
 
-
     const phoneJid =
       await getPhoneJid(
         member
       );
 
-
     if (
-      isPhoneJid(
-        phoneJid
-      )
+      isPhoneJid(phoneJid)
     ) {
-
       await sock.sendMessage(
         groupId,
         {
@@ -2384,46 +2101,27 @@ async function sendWelcome(
             getWelcomeText(
               name
             ),
-
           mentions: [
             phoneJid
           ]
         }
       );
-
-
-      console.log(
-        `👋 Welcome sent to ${name} in ${groupId}`
+    } else {
+      await sock.sendMessage(
+        groupId,
+        {
+          text:
+            getWelcomeText(
+              name
+            ).replace(
+              `@${name}`,
+              name
+            )
+        }
       );
-
-      return;
     }
 
-
-    const fallbackText =
-      getWelcomeText(
-        name
-      ).replace(
-        `@${name}`,
-        name
-      );
-
-
-    await sock.sendMessage(
-      groupId,
-      {
-        text:
-          fallbackText
-      }
-    );
-
-
-    console.log(
-      `👋 Welcome sent without mention to ${name}`
-    );
-
   } catch (error) {
-
     console.log(
       "❌ Welcome send error:",
       error?.message
@@ -2431,38 +2129,30 @@ async function sendWelcome(
   }
 }
 
-
 /* =========================================================
-   LID MAPPING EVENT
+   LID EVENT
 ========================================================= */
 
 function handleLidMappingUpdate(
   mapping
 ) {
   try {
-
     if (!mapping) {
       return;
     }
 
     const mappings =
-      Array.isArray(
-        mapping
-      )
+      Array.isArray(mapping)
         ? mapping
         : Array.isArray(
             mapping?.mappings
           )
         ? mapping.mappings
-        : [
-            mapping
-          ];
-
+        : [mapping];
 
     for (
       const item of mappings
     ) {
-
       if (!item) {
         continue;
       }
@@ -2479,28 +2169,23 @@ function handleLidMappingUpdate(
         item.phone ||
         item.phoneNumber;
 
-
       if (
         lid &&
         pn
       ) {
-
         saveLidMapping(
           lid,
           pn
         );
       }
     }
-
   } catch (error) {
-
     console.log(
       "⚠️ LID mapping update error:",
       error?.message
     );
   }
 }
-
 
 /* =========================================================
    PAIRING CODE
@@ -2510,9 +2195,7 @@ async function generatePairingCode(
   state
 ) {
   try {
-
     if (!PHONE_NUMBER) {
-
       console.log(
         "❌ PHONE_NUMBER is missing in .env"
       );
@@ -2520,11 +2203,9 @@ async function generatePairingCode(
       return;
     }
 
-
     if (
       state.creds.registered
     ) {
-
       console.log(
         "✅ Existing WhatsApp session found."
       );
@@ -2536,28 +2217,19 @@ async function generatePairingCode(
       return;
     }
 
-
     const savedNumber =
       readSavedPairingNumber();
 
-
     if (
       savedNumber &&
-      savedNumber ===
-        PHONE_NUMBER
+      savedNumber === PHONE_NUMBER
     ) {
-
       console.log(
         "ℹ️ Same PHONE_NUMBER detected."
       );
 
-      console.log(
-        "🔐 Pairing Code will NOT be generated again."
-      );
-
       return;
     }
-
 
     if (
       pairingRequested
@@ -2565,10 +2237,7 @@ async function generatePairingCode(
       return;
     }
 
-
-    pairingRequested =
-      true;
-
+    pairingRequested = true;
 
     console.log(
       `📱 New PHONE_NUMBER detected: ${PHONE_NUMBER}`
@@ -2578,7 +2247,6 @@ async function generatePairingCode(
       "🔐 Generating WhatsApp Pairing Code..."
     );
 
-
     await new Promise(
       resolve =>
         setTimeout(
@@ -2587,29 +2255,22 @@ async function generatePairingCode(
         )
     );
 
-
     if (
       !sock ||
       state.creds.registered
     ) {
-
-      pairingRequested =
-        false;
-
+      pairingRequested = false;
       return;
     }
-
 
     const code =
       await sock.requestPairingCode(
         PHONE_NUMBER
       );
 
-
     savePairingNumber(
       PHONE_NUMBER
     );
-
 
     console.log(
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -2628,9 +2289,7 @@ async function generatePairingCode(
     );
 
   } catch (error) {
-
-    pairingRequested =
-      false;
+    pairingRequested = false;
 
     console.log(
       "❌ Pairing code error:",
@@ -2639,470 +2298,61 @@ async function generatePairingCode(
   }
 }
 
-
 /* =========================================================
-   COMMAND CONTROL
+   MESSAGE TEXT
 ========================================================= */
 
-function getControlTarget(
-  text
+function getMessageText(
+  message
 ) {
-  const parts =
-    String(text || "")
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean);
+  const msg =
+    message?.message;
 
-  if (
-    parts.length < 2
-  ) {
+  if (!msg) {
     return "";
   }
 
-  return normalizeCommand(
-    parts[1]
-  );
+  return (
+    msg.conversation ||
+    msg.extendedTextMessage?.text ||
+    msg.imageMessage?.caption ||
+    msg.videoMessage?.caption ||
+    msg.documentMessage?.caption ||
+    ""
+  ).trim();
 }
-
-
-async function handleCommandControl(
-  remoteJid,
-  message,
-  command,
-  text
-) {
-
-  /* =======================================================
-     /on
-  ======================================================= */
-
-  if (
-    command === "/on" ||
-    command === "/commandon"
-  ) {
-
-    const admin =
-      await isSenderAdmin(
-        remoteJid,
-        message
-      );
-
-    if (!admin) {
-      return true;
-    }
-
-
-    const target =
-      getControlTarget(
-        text
-      );
-
-
-    if (!target) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text: `
-🟢 *COMMAND ON*
-
-ব্যবহার:
-
-/on admin
-
-/on deal
-
-/on website
-
-/on rules
-
-অথবা:
-
-/commandon admin
-`
-        }
-      );
-
-      return true;
-    }
-
-
-    if (
-      isProtectedCommand(
-        target
-      )
-    ) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            `🔒 *${target}* Protected Command।\n\nএটি সবসময় ON থাকবে।`
-        }
-      );
-
-      return true;
-    }
-
-
-    if (
-      isCommandEnabled(
-        remoteJid,
-        target
-      )
-    ) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            `🟢 *${target}* ইতোমধ্যে ON আছে।`
-        }
-      );
-
-      return true;
-    }
-
-
-    setCommandStatus(
-      remoteJid,
-      target,
-      true
-    );
-
-
-    await sock.sendMessage(
-      remoteJid,
-      {
-        text: `
-🟢 *COMMAND ON*
-
-⚙️ Command:
-${target}
-
-✅ এখন এই Group-এ Commandটি চালু হয়েছে।
-
-📋 Copy:
-${target}
-`
-      }
-    );
-
-
-    console.log(
-      `🟢 Command ON | ${target} | ${remoteJid}`
-    );
-
-
-    return true;
-  }
-
-
-  /* =======================================================
-     /off
-  ======================================================= */
-
-  if (
-    command === "/off" ||
-    command === "/commandoff"
-  ) {
-
-    const admin =
-      await isSenderAdmin(
-        remoteJid,
-        message
-      );
-
-    if (!admin) {
-      return true;
-    }
-
-
-    const target =
-      getControlTarget(
-        text
-      );
-
-
-    if (!target) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text: `
-🔴 *COMMAND OFF*
-
-ব্যবহার:
-
-/off admin
-
-/off deal
-
-/off website
-
-/off rules
-
-অথবা:
-
-/commandoff admin
-`
-        }
-      );
-
-      return true;
-    }
-
-
-    if (
-      isProtectedCommand(
-        target
-      )
-    ) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            `🔒 *${target}* Protected Command।\n\nএই Command OFF করা যাবে না।`
-        }
-      );
-
-      return true;
-    }
-
-
-    if (
-      !isCommandEnabled(
-        remoteJid,
-        target
-      )
-    ) {
-
-      await sock.sendMessage(
-        remoteJid,
-        {
-          text:
-            `🔴 *${target}* ইতোমধ্যে OFF আছে।`
-        }
-      );
-
-      return true;
-    }
-
-
-    setCommandStatus(
-      remoteJid,
-      target,
-      false
-    );
-
-
-    await sock.sendMessage(
-      remoteJid,
-      {
-        text: `
-🔴 *COMMAND OFF*
-
-⚙️ Command:
-${target}
-
-⛔ এখন এই Group-এ Commandটি বন্ধ করা হয়েছে।
-
-🟢 আবার চালু করতে:
-
-/on ${target}
-`
-      }
-    );
-
-
-    console.log(
-      `🔴 Command OFF | ${target} | ${remoteJid}`
-    );
-
-
-    return true;
-  }
-
-
-  /* =======================================================
-     /cmdlist
-  ======================================================= */
-
-  if (
-    command === "/cmdlist"
-  ) {
-
-    const admin =
-      await isSenderAdmin(
-        remoteJid,
-        message
-      );
-
-    if (!admin) {
-      return true;
-    }
-
-
-    const commands =
-      getGroupCommands(
-        remoteJid
-      );
-
-    const lines = [];
-
-
-    for (
-      const cmd of commands
-    ) {
-
-      const status =
-        isCommandEnabled(
-          remoteJid,
-          cmd
-        )
-          ? "🟢 ON"
-          : "🔴 OFF";
-
-      const adminMark =
-        isAdminOnlyCommand(
-          cmd
-        )
-          ? " 👑"
-          : "";
-
-      const protectedMark =
-        isProtectedCommand(
-          cmd
-        )
-          ? " 🔒"
-          : "";
-
-      lines.push(
-        `${cmd} → ${status}${adminMark}${protectedMark}`
-      );
-    }
-
-
-    await sock.sendMessage(
-      remoteJid,
-      {
-        text: `
-╭━━━━━━━━━━━━━━━━━━━━╮
-      ⚙️ *COMMAND STATUS*
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-${lines.join("\n")}
-
-━━━━━━━━━━━━━━━━━━━━
-
-🟢 ON
-🔴 OFF
-👑 Admin Only
-🔒 Protected
-
-━━━━━━━━━━━━━━━━━━━━
-
-📌 Command OFF:
-
-/off admin
-
-📌 Command ON:
-
-/on admin
-
-📌 Example:
-
-/off deal
-
-/on deal
-
-🤍 *PIYAS*
-`
-      }
-    );
-
-
-    /*
-       প্রতিটি Command-এর জন্য
-       slash সহ Copy button।
-    */
-
-    for (
-      const cmd of commands
-    ) {
-
-      await sendCopyButton(
-        remoteJid,
-        cmd
-      );
-    }
-
-
-    return true;
-  }
-
-
-  return false;
-}
-
 
 /* =========================================================
    START BOT
 ========================================================= */
 
 async function startBot() {
-
   try {
-
     let authState =
       await useMultiFileAuthState(
         AUTH_DIR
       );
 
-
     let {
       state,
       saveCreds
-    } =
-      authState;
-
+    } = authState;
 
     const currentCredPhone =
       getCredentialPhoneNumber(
         state.creds
       );
 
-
-    const savedPairingNumber =
-      readSavedPairingNumber();
-
-
-    /* =====================================================
-       NUMBER CHANGE DETECTION
-    ===================================================== */
-
     const numberChanged =
       PHONE_NUMBER &&
-      (
-        (
-          state.creds.registered &&
-          currentCredPhone &&
-          currentCredPhone !==
-            PHONE_NUMBER
-        ) ||
-        (
-          state.creds.registered &&
-          !currentCredPhone &&
-          savedPairingNumber &&
-          savedPairingNumber !==
-            PHONE_NUMBER
-        )
-      );
+      state.creds.registered &&
+      currentCredPhone &&
+      currentCredPhone !==
+        PHONE_NUMBER;
 
-
-    if (numberChanged) {
-
+    if (
+      numberChanged
+    ) {
       console.log(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       );
@@ -3112,10 +2362,7 @@ async function startBot() {
       );
 
       console.log(
-        `Old: ${
-          currentCredPhone ||
-          savedPairingNumber
-        }`
+        `Old: ${currentCredPhone}`
       );
 
       console.log(
@@ -3126,33 +2373,25 @@ async function startBot() {
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
       );
 
-
       await resetAuthForNumberChange();
 
-
-      pairingRequested =
-        false;
-
+      pairingRequested = false;
 
       authState =
         await useMultiFileAuthState(
           AUTH_DIR
         );
 
-
       state =
         authState.state;
 
-
       saveCreds =
         authState.saveCreds;
-
 
       console.log(
         "🆕 New WhatsApp session created."
       );
     }
-
 
     /* =====================================================
        SOCKET
@@ -3160,30 +2399,21 @@ async function startBot() {
 
     sock =
       makeWASocket({
-
-        auth:
-          state,
-
+        auth: state,
         logger,
-
         browser:
           Browsers.ubuntu(
             "Chrome"
           ),
-
         markOnlineOnConnect:
           false,
-
         syncFullHistory:
           false,
-
         generateHighQualityLinkPreview:
           false,
-
         printQRInTerminal:
           false
       });
-
 
     /* =====================================================
        CREDENTIALS
@@ -3194,16 +2424,14 @@ async function startBot() {
       saveCreds
     );
 
-
     /* =====================================================
-       LID MAPPING
+       LID
     ===================================================== */
 
     sock.ev.on(
       "lid-mapping.update",
       handleLidMappingUpdate
     );
-
 
     /* =====================================================
        CONTACTS
@@ -3212,15 +2440,11 @@ async function startBot() {
     sock.ev.on(
       "contacts.upsert",
       contacts => {
-
         try {
-
           saveContacts(
             contacts
           );
-
         } catch (error) {
-
           console.log(
             "⚠️ contacts.upsert error:",
             error?.message
@@ -3229,19 +2453,14 @@ async function startBot() {
       }
     );
 
-
     sock.ev.on(
       "contacts.update",
       contacts => {
-
         try {
-
           saveContacts(
             contacts
           );
-
         } catch (error) {
-
           console.log(
             "⚠️ contacts.update error:",
             error?.message
@@ -3250,7 +2469,6 @@ async function startBot() {
       }
     );
 
-
     /* =====================================================
        GROUP PARTICIPANTS
     ===================================================== */
@@ -3258,9 +2476,7 @@ async function startBot() {
     sock.ev.on(
       "group-participants.update",
       async event => {
-
         try {
-
           const groupId =
             event?.id;
 
@@ -3271,11 +2487,9 @@ async function startBot() {
             event?.participants ||
             [];
 
-
           if (!groupId) {
             return;
           }
-
 
           if (
             !isGroupAllowed(
@@ -3285,43 +2499,33 @@ async function startBot() {
             return;
           }
 
-
           console.log(
             `👥 Group update: ${action} | ${groupId} | ${participants.length} participant(s)`
           );
 
-
           if (
             action === "add"
           ) {
-
             for (
-              const participant of
-              participants
+              const participant of participants
             ) {
-
               await sendWelcome(
                 groupId,
                 participant
               );
             }
-
-            return;
           }
-
 
           if (
             action === "promote" ||
             action === "demote"
           ) {
-
             await cacheParticipants(
               participants
             );
           }
 
         } catch (error) {
-
           console.log(
             "❌ Group participant event error:",
             error?.message
@@ -3330,7 +2534,6 @@ async function startBot() {
       }
     );
 
-
     /* =====================================================
        CONNECTION
     ===================================================== */
@@ -3338,43 +2541,33 @@ async function startBot() {
     sock.ev.on(
       "connection.update",
       async update => {
-
         try {
-
           const {
             connection,
             lastDisconnect
-          } =
-            update;
-
+          } = update;
 
           if (
             connection ===
             "connecting"
           ) {
-
             console.log(
               "🔄 Connecting to WhatsApp..."
             );
-
 
             if (
               PHONE_NUMBER &&
               !state.creds.registered
             ) {
-
               await generatePairingCode(
                 state
               );
             }
           }
 
-
           if (
-            connection ===
-            "open"
+            connection === "open"
           ) {
-
             console.log(
               "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             );
@@ -3387,100 +2580,71 @@ async function startBot() {
               "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             );
 
-
-            reconnecting =
-              false;
-
+            reconnecting = false;
 
             try {
-
               const groups =
                 await sock.groupFetchAllParticipating();
 
-
               for (
-                const group of
-                Object.values(
+                const group of Object.values(
                   groups || {}
                 )
               ) {
-
                 await cacheParticipants(
                   group?.participants ||
                     []
                 );
               }
 
-
               console.log(
                 "📦 Group participant cache loaded."
               );
 
             } catch (error) {
-
               console.log(
                 "⚠️ Group cache error:",
                 error?.message
               );
             }
 
-
             return;
           }
 
-
           if (
-            connection ===
-            "close"
+            connection === "close"
           ) {
-
             const statusCode =
               new Boom(
                 lastDisconnect?.error
-              )?.output
-                ?.statusCode;
-
+              )?.output?.statusCode;
 
             const shouldReconnect =
               statusCode !==
               DisconnectReason.loggedOut;
 
-
             console.log(
               `❌ WhatsApp connection closed. Code: ${statusCode}`
             );
 
+            sock = null;
 
-            sock =
-              null;
-
-
-            pairingRequested =
-              false;
-
+            pairingRequested = false;
 
             if (
               shouldReconnect &&
               !reconnecting
             ) {
-
-              reconnecting =
-                true;
-
+              reconnecting = true;
 
               console.log(
                 "🔄 Reconnecting..."
               );
 
-
               setTimeout(
                 () => {
-
-                  reconnecting =
-                    false;
-
+                  reconnecting = false;
                   startBot();
-
                 },
                 3000
               );
@@ -3488,7 +2652,6 @@ async function startBot() {
             } else if (
               !shouldReconnect
             ) {
-
               console.log(
                 "🚪 WhatsApp session logged out."
               );
@@ -3500,7 +2663,6 @@ async function startBot() {
           }
 
         } catch (error) {
-
           console.log(
             "❌ Connection update error:",
             error?.message
@@ -3508,7 +2670,6 @@ async function startBot() {
         }
       }
     );
-
 
     /* =====================================================
        MESSAGES
@@ -3519,12 +2680,9 @@ async function startBot() {
       async ({
         messages
       }) => {
-
         try {
-
           const message =
             messages?.[0];
-
 
           if (
             !message ||
@@ -3533,10 +2691,8 @@ async function startBot() {
             return;
           }
 
-
           const remoteJid =
             message.key?.remoteJid;
-
 
           if (
             !remoteJid ||
@@ -3547,7 +2703,6 @@ async function startBot() {
             return;
           }
 
-
           if (
             !isGroupAllowed(
               remoteJid
@@ -3556,104 +2711,80 @@ async function startBot() {
             return;
           }
 
-
           const text =
             getMessageText(
               message
             );
 
-
           if (!text) {
             return;
           }
 
+          const parts =
+            text
+              .trim()
+              .split(
+                /\s+/
+              );
+
+          const rawCommand =
+            parts[0]
+              .toLowerCase();
 
           const command =
-            normalizeCommand(
-              text
-                .split(/\s+/)[0]
+            normalizeCommandName(
+              rawCommand
             );
 
+          const args =
+            parts.slice(1);
 
-          if (!command) {
-            return;
-          }
+          /* =================================================
+             ADMIN-ONLY COMMANDS
+          ================================================= */
 
+          const adminOnlyCommands = [
+            "adminpanel",
+            "cmdlist",
+            "botoff",
+            "boton",
+            "off",
+            "on"
+          ];
 
-          /* ===============================================
-             ADMIN ONLY COMMAND
-          =============================================== */
+          /*
+           * Admin Panel এবং control commands
+           * সাধারণ Member কখনো দেখতে/ব্যবহার করতে পারবে না।
+           */
 
           if (
-            isAdminOnlyCommand(
+            adminOnlyCommands.includes(
               command
             )
           ) {
-
             const admin =
               await isSenderAdmin(
                 remoteJid,
                 message
               );
 
-
-            /*
-               সাধারণ Member কোনো response পাবে না।
-            */
-
             if (!admin) {
               return;
             }
           }
 
-
-          /* ===============================================
-             COMMAND ON/OFF/CMDLIST
-          =============================================== */
-
-          const controlHandled =
-            await handleCommandControl(
-              remoteJid,
-              message,
-              command,
-              text
-            );
-
-
-          if (
-            controlHandled
-          ) {
-            return;
-          }
-
-
-          /* ===============================================
+          /* =================================================
              BOT OFF
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/botoff"
+            command === "botoff"
           ) {
-
-            const admin =
-              await isSenderAdmin(
-                remoteJid,
-                message
-              );
-
-
-            if (!admin) {
-              return;
-            }
-
-
             if (
               !isBotEnabled(
                 remoteJid
               )
             ) {
-
               await sock.sendMessage(
                 remoteJid,
                 {
@@ -3665,12 +2796,10 @@ async function startBot() {
               return;
             }
 
-
             setBotStatus(
               remoteJid,
               false
             );
-
 
             await sock.sendMessage(
               remoteJid,
@@ -3680,43 +2809,21 @@ async function startBot() {
               }
             );
 
-
-            console.log(
-              `🔴 Bot OFF | Group: ${remoteJid}`
-            );
-
-
             return;
           }
 
-
-          /* ===============================================
+          /* =================================================
              BOT ON
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/boton"
+            command === "boton"
           ) {
-
-            const admin =
-              await isSenderAdmin(
-                remoteJid,
-                message
-              );
-
-
-            if (!admin) {
-              return;
-            }
-
-
             if (
               isBotEnabled(
                 remoteJid
               )
             ) {
-
               await sock.sendMessage(
                 remoteJid,
                 {
@@ -3728,12 +2835,10 @@ async function startBot() {
               return;
             }
 
-
             setBotStatus(
               remoteJid,
               true
             );
-
 
             await sock.sendMessage(
               remoteJid,
@@ -3743,19 +2848,222 @@ async function startBot() {
               }
             );
 
+            return;
+          }
 
-            console.log(
-              `🟢 Bot ON | Group: ${remoteJid}`
+          /* =================================================
+             ADMIN PANEL
+          ================================================= */
+
+          if (
+            command ===
+            "adminpanel"
+          ) {
+            await sendAdminPanel(
+              remoteJid
             );
-
 
             return;
           }
 
+          /* =================================================
+             COMMAND ON / OFF
+          ================================================= */
 
-          /* ===============================================
-             BOT OFF হলে সাধারণ Command বন্ধ
-          =============================================== */
+          if (
+            command === "off" ||
+            command === "on"
+          ) {
+            const target =
+              normalizeCommandName(
+                args[0]
+              );
+
+            if (!target) {
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+      ⚙️ *COMMAND CONTROL*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+🔴 *OFF:*
+
+/off <command>
+
+🟢 *ON:*
+
+/on <command>
+
+💡 উদাহরণ:
+
+/off admin
+/on admin
+
+/off deal
+/on deal
+
+/off rules
+/on rules
+
+/off website
+/on website
+`
+                }
+              );
+
+              return;
+            }
+
+            const protectedCommands = [
+              "on",
+              "off",
+              "boton",
+              "botoff",
+              "cmdlist",
+              "adminpanel"
+            ];
+
+            if (
+              protectedCommands.includes(
+                target
+              )
+            ) {
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text:
+                    "⚠️ এই Admin Control Command বন্ধ করা যাবে না।"
+                }
+              );
+
+              return;
+            }
+
+            const targetCommand =
+              target === "ডিল"
+                ? "deal"
+                : target;
+
+            if (
+              command === "off"
+            ) {
+              if (
+                !isCommandEnabled(
+                  remoteJid,
+                  targetCommand
+                )
+              ) {
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      `🔴 */${targetCommand}* ইতোমধ্যে OFF আছে।`
+                  }
+                );
+
+                return;
+              }
+
+              setCommandStatus(
+                remoteJid,
+                targetCommand,
+                false
+              );
+
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       🔴 *COMMAND OFF*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+⚙️ *Command:*
+/${targetCommand}
+
+❌ এখন থেকে এই Command
+কাজ করবে না।
+
+🟢 আবার চালু করতে:
+
+/on ${targetCommand}
+
+🤖 *PIYAS BOT*
+`
+                }
+              );
+
+              return;
+            }
+
+            if (
+              command === "on"
+            ) {
+              if (
+                isCommandEnabled(
+                  remoteJid,
+                  targetCommand
+                )
+              ) {
+                await sock.sendMessage(
+                  remoteJid,
+                  {
+                    text:
+                      `🟢 */${targetCommand}* ইতোমধ্যে ON আছে।`
+                  }
+                );
+
+                return;
+              }
+
+              setCommandStatus(
+                remoteJid,
+                targetCommand,
+                true
+              );
+
+              await sock.sendMessage(
+                remoteJid,
+                {
+                  text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🟢 *COMMAND ON*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+⚙️ *Command:*
+/${targetCommand}
+
+✅ এখন থেকে এই Command
+আবার কাজ করবে।
+
+🤖 *PIYAS BOT*
+`
+                }
+              );
+
+              return;
+            }
+          }
+
+          /* =================================================
+             COMMAND LIST
+          ================================================= */
+
+          if (
+            command === "cmdlist"
+          ) {
+            await sendCommandList(
+              remoteJid
+            );
+
+            return;
+          }
+
+          /* =================================================
+             BOT OFF হলে সাধারণ command বন্ধ
+          ================================================= */
 
           if (
             !isBotEnabled(
@@ -3765,66 +3073,46 @@ async function startBot() {
             return;
           }
 
+          /* =================================================
+             COMMAND OFF CHECK
+          ================================================= */
 
-          /* ===============================================
-             SPECIFIC COMMAND OFF CHECK
-          =============================================== */
+          const commandAlias =
+            command === "ডিল"
+              ? "deal"
+              : command;
 
           if (
-            !isProtectedCommand(
-              command
-            ) &&
             !isCommandEnabled(
               remoteJid,
-              command
+              commandAlias
             )
           ) {
-
-            /*
-               OFF থাকা Command-এর কোনো response হবে না।
-            */
-
             return;
           }
 
-
-          /* ===============================================
+          /* =================================================
              MENU
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/menu" ||
-            command ===
-              "/bot"
+            command === "menu" ||
+            command === "bot"
           ) {
-
-            const admin =
-              await isSenderAdmin(
-                remoteJid,
-                message
-              );
-
-
-            await sendMenu(
-              remoteJid,
-              admin
+            await sendPublicMenu(
+              remoteJid
             );
 
-
             return;
           }
 
-
-          /* ===============================================
+          /* =================================================
              RULES
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/rules"
+            command === "rules"
           ) {
-
             await sock.sendMessage(
               remoteJid,
               {
@@ -3833,20 +3121,16 @@ async function startBot() {
               }
             );
 
-
             return;
           }
 
-
-          /* ===============================================
+          /* =================================================
              WEBSITE
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/website"
+            command === "website"
           ) {
-
             await sock.sendMessage(
               remoteJid,
               {
@@ -3855,127 +3139,96 @@ async function startBot() {
               }
             );
 
-
             return;
           }
 
-
-          /* ===============================================
+          /* =================================================
              DEAL
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/deal" ||
-            command ===
-              "/ডিল"
+            command === "deal" ||
+            command === "ডিল"
           ) {
-
             await sendDealNotice(
               remoteJid
             );
 
-
             return;
           }
 
-
-          /* ===============================================
-             PING
-          =============================================== */
+          /* =================================================
+             ADMIN
+          ================================================= */
 
           if (
-            command ===
-              "/ping"
+            command === "admin"
           ) {
-
-            const start =
-              Date.now();
-
-
-            const msg =
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    "🏓 Checking Bot..."
-                }
-              );
-
-
-            const ping =
-              Date.now() -
-              start;
-
-
-            await sock.sendMessage(
-              remoteJid,
-              {
-                text:
-                  `🏓 *PONG!*\n\n⚡ Response: ${ping}ms\n🤖 Bot: Online`,
-
-                edit:
-                  msg.key
-              }
+            await sendAdminList(
+              remoteJid
             );
 
-
             return;
           }
 
-
-          /* ===============================================
-             ID
-          =============================================== */
-
-          if (
-            command ===
-              "/id"
-          ) {
-
-            await sock.sendMessage(
-              remoteJid,
-              {
-                text:
-                  `🆔 *GROUP ID*\n\n${remoteJid}`
-              }
-            );
-
-
-            return;
-          }
-
-
-          /* ===============================================
-             GROUP INFO
-          =============================================== */
+          /* =================================================
+             MEMBERS
+          ================================================= */
 
           if (
-            command ===
-              "/groupinfo"
+            command === "members"
           ) {
-
             const metadata =
               await sock.groupMetadata(
                 remoteJid
               );
 
+            const participants =
+              metadata?.participants ||
+              [];
+
+            await sock.sendMessage(
+              remoteJid,
+              {
+                text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        👥 *GROUP MEMBERS*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+👥 *মোট Member:* ${participants.length} জন
+
+🤍 *Piyas*
+`
+              }
+            );
+
+            return;
+          }
+
+          /* =================================================
+             GROUP INFO
+          ================================================= */
+
+          if (
+            command === "groupinfo"
+          ) {
+            const metadata =
+              await sock.groupMetadata(
+                remoteJid
+              );
 
             const participants =
               metadata?.participants ||
               [];
 
-
             await cacheParticipants(
               participants
             );
-
 
             const admins =
               participants.filter(
                 isAdminParticipant
               );
-
 
             const created =
               metadata?.creation
@@ -3987,7 +3240,6 @@ async function startBot() {
                     "en-BD"
                   )
                 : "Unknown";
-
 
             await sock.sendMessage(
               remoteJid,
@@ -4029,235 +3281,70 @@ async function startBot() {
               }
             );
 
-
             return;
           }
 
-
-          /* ===============================================
-             MEMBERS
-          =============================================== */
+          /* =================================================
+             ID
+          ================================================= */
 
           if (
-            command ===
-              "/members"
+            command === "id"
           ) {
-
-            const metadata =
-              await sock.groupMetadata(
-                remoteJid
-              );
-
-
-            const participants =
-              metadata?.participants ||
-              [];
-
-
             await sock.sendMessage(
               remoteJid,
               {
-                text: `
-╭━━━━━━━━━━━━━━━━━━━━╮
-        👥 *GROUP MEMBERS*
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-👥 *মোট Member:* ${participants.length} জন
-
-🤍 *Piyas*
-`
+                text:
+                  `🆔 *GROUP ID*\n\n${remoteJid}`
               }
             );
-
 
             return;
           }
 
-
-          /* ===============================================
-             ADMIN
-          =============================================== */
+          /* =================================================
+             PING
+          ================================================= */
 
           if (
-            command ===
-              "/admin"
+            command === "ping"
           ) {
+            const start =
+              Date.now();
 
-            try {
-
-              const {
-                admins,
-                result
-              } =
-                await getAdminData(
-                  remoteJid
-                );
-
-
-              if (
-                !admins.length
-              ) {
-
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      "👑 এই গ্রুপে কোনো Admin পাওয়া যায়নি।"
-                  }
-                );
-
-
-                return;
-              }
-
-
-              const lines = [];
-              const mentions = [];
-              const usedMentions =
-                new Set();
-
-
-              let number =
-                1;
-
-
-              for (
-                const admin of
-                result
-              ) {
-
-                const jid =
-                  admin.jid;
-
-
-                const role =
-                  admin.owner
-                    ? "⭐ *Group Owner*"
-                    : "👑 *Admin*";
-
-
-                if (
-                  isPhoneJid(
-                    jid
-                  ) &&
-                  !usedMentions.has(
-                    jid
-                  )
-                ) {
-
-                  usedMentions.add(
-                    jid
-                  );
-
-                  mentions.push(
-                    jid
-                  );
-
-
-                  const phone =
-                    jid
-                      .split("@")[0]
-                      .replace(
-                        /[^0-9]/g,
-                        ""
-                      );
-
-
-                  lines.push(
-                    `${number}️⃣ @${phone} ${role}`
-                  );
-
-                } else {
-
-                  const safeName =
-                    admin.name ||
-                    "Admin";
-
-
-                  lines.push(
-                    `${number}️⃣ ${safeName} ${role}`
-                  );
-                }
-
-
-                number++;
-              }
-
-
-              const adminText = `
-╭━━━━━━━━━━━━━━━━━━━━╮
-       👑 *GROUP ADMINS*
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-${lines.join("\n\n")}
-
-━━━━━━━━━━━━━━━━━━━━
-
-👥 *মোট Admin:* ${admins.length} জন
-
-🤍 *Piyas*
-`;
-
-
+            const msg =
               await sock.sendMessage(
                 remoteJid,
                 {
                   text:
-                    adminText,
-
-                  mentions: [
-                    ...new Set(
-                      mentions.filter(
-                        jid =>
-                          isPhoneJid(
-                            jid
-                          )
-                      )
-                    )
-                  ]
+                    "🏓 Checking Bot..."
                 }
               );
 
+            const ping =
+              Date.now() -
+              start;
 
-              console.log(
-                `👑 /admin sent | Total: ${admins.length} | Clickable mentions: ${mentions.length}`
-              );
-
-            } catch (error) {
-
-              console.log(
-                "❌ /admin error:",
-                error?.message
-              );
-
-
-              try {
-
-                await sock.sendMessage(
-                  remoteJid,
-                  {
-                    text:
-                      "⚠️ Admin list আনতে সমস্যা হয়েছে। আবার /admin লিখে চেষ্টা করুন।"
-                  }
-                );
-
-              } catch {}
-            }
-
+            await sock.sendMessage(
+              remoteJid,
+              {
+                text:
+                  `🏓 *PONG!*\n\n⚡ Response: ${ping}ms\n🤖 Bot: Online`,
+                edit:
+                  msg.key
+              }
+            );
 
             return;
           }
 
-
-          /* ===============================================
+          /* =================================================
              PIYAS
-          =============================================== */
+          ================================================= */
 
           if (
-            command ===
-              "/piyas"
+            command === "piyas"
           ) {
-
             await sock.sendMessage(
               remoteJid,
               {
@@ -4266,13 +3353,10 @@ ${lines.join("\n\n")}
               }
             );
 
-
             return;
           }
 
-
         } catch (error) {
-
           console.log(
             "⚠️ Message handler error:",
             error?.message
@@ -4281,44 +3365,33 @@ ${lines.join("\n\n")}
       }
     );
 
-
     console.log(
       "🚀 WhatsApp Bot Starting..."
     );
 
   } catch (error) {
-
     console.log(
       "❌ Failed to start bot:",
       error?.message
     );
 
+    sock = null;
 
-    sock =
-      null;
-
-
-    if (!reconnecting) {
-
-      reconnecting =
-        true;
-
+    if (
+      !reconnecting
+    ) {
+      reconnecting = true;
 
       setTimeout(
         () => {
-
-          reconnecting =
-            false;
-
+          reconnecting = false;
           startBot();
-
         },
         5000
       );
     }
   }
 }
-
 
 /* =========================================================
    GLOBAL ERRORS
@@ -4327,7 +3400,6 @@ ${lines.join("\n\n")}
 process.on(
   "uncaughtException",
   error => {
-
     console.log(
       "❌ Uncaught Exception:",
       error
@@ -4335,11 +3407,9 @@ process.on(
   }
 );
 
-
 process.on(
   "unhandledRejection",
   error => {
-
     console.log(
       "❌ Unhandled Rejection:",
       error
@@ -4347,295 +3417,44 @@ process.on(
   }
 );
 
-
 /* =========================================================
    SHUTDOWN
 ========================================================= */
 
 async function shutdown() {
-
   console.log(
     "\n🛑 Shutting down bot..."
   );
 
-
   try {
-
     if (sock) {
-
       sock.end(
         new Error(
           "Bot shutting down"
         )
       );
     }
-
   } catch {}
-
 
   try {
-
     server.close();
-
   } catch {}
 
-
-  process.exit(
-    0
-  );
+  process.exit(0);
 }
-
 
 process.on(
   "SIGINT",
   shutdown
 );
 
-
 process.on(
   "SIGTERM",
   shutdown
 );
-
 
 /* =========================================================
    START
 ========================================================= */
 
 startBot();
-
-
-/*
-=========================================================
-COMMAND SYSTEM
-=========================================================
-
-👑 ADMIN ONLY:
-
-/botoff
-/boton
-/on
-/off
-/commandon
-/commandoff
-/cmdlist
-
-
-=========================================================
-
-🎯 নির্দিষ্ট Command OFF:
-
-/off admin
-
-→ /admin বন্ধ হবে
-
-
-/on admin
-
-→ /admin চালু হবে
-
-
-/off deal
-
-→ /deal বন্ধ হবে
-
-
-/on deal
-
-→ /deal চালু হবে
-
-
-/off website
-
-→ /website বন্ধ হবে
-
-
-/on website
-
-→ /website চালু হবে
-
-
-/off rules
-
-→ /rules বন্ধ হবে
-
-
-/on rules
-
-→ /rules চালু হবে
-
-
-=========================================================
-
-"/" সহ দিলেও কাজ করবে:
-
-/off /admin
-
-/on /admin
-
-/off /deal
-
-/on /deal
-
-
-=========================================================
-
-পুরোনো Command-ও কাজ করবে:
-
-/commandoff /admin
-
-/commandon /admin
-
-/commandoff /deal
-
-/commandon /deal
-
-
-=========================================================
-
-📋 COPY BUTTON
-
-Menu-এর প্রতিটি Command-এর Copy button
-থাকবে।
-
-Copy করলে "/" সহ পুরো Command copy হবে।
-
-উদাহরণ:
-
-/admin
-
-/deal
-
-/website
-
-/ping
-
-
-Admin Control-এর ক্ষেত্রেও:
-
-/on admin
-
-/off admin
-
-/on deal
-
-/off deal
-
-
-পুরোটা "/" সহ copy হবে।
-
-
-=========================================================
-
-👤 সাধারণ Member
-
-সাধারণ Member:
-
-❌ /botoff দেখতে পাবে না
-❌ /boton দেখতে পাবে না
-❌ /on দেখতে পাবে না
-❌ /off দেখতে পাবে না
-❌ /commandon দেখতে পাবে না
-❌ /commandoff দেখতে পাবে না
-❌ /cmdlist দেখতে পাবে না
-
-এগুলো ব্যবহার করলেও Bot কোনো response
-দেবে না।
-
-
-=========================================================
-
-👑 ADMIN
-
-Admin /menu দিলে Admin Control দেখতে পাবে।
-
-সেখানে:
-
-🔴 /botoff
-🟢 /boton
-🟢 /on command
-🔴 /off command
-📋 /cmdlist
-
-
-=========================================================
-
-🔴 OFF COMMAND
-
-যেমন:
-
-/off admin
-
-এরপর সাধারণ Member:
-
-/admin
-
-লিখলে কোনো response পাবে না।
-
-Menu থেকেও /admin সাধারণ Member-এর
-কাছে চলে যাবে।
-
-
-কিন্তু Admin /menu দিলে /admin দেখা যাবে
-এবং Admin চাইলে:
-
-/on admin
-
-দিয়ে আবার চালু করতে পারবে।
-
-
-=========================================================
-
-💾 PERMANENT SAVE
-
-Command-এর ON/OFF status:
-
-command_status.json
-
-ফাইলে Group ID অনুযায়ী save হবে।
-
-Bot restart হলেও setting থাকবে।
-
-
-=========================================================
-
-🤖 BOT OFF
-
-/botoff
-
-দিলে পুরো Bot ওই Group-এ বন্ধ হবে।
-
-/boton
-
-দিলে আবার চালু হবে।
-
-
-=========================================================
-
-⚠️ IMPORTANT
-
-/on বা /off দিয়ে যেকোনো নামের Command
-status হিসেবে save করা যাবে।
-
-তবে কোনো Command-এর আলাদা handler
-কোডে না থাকলে /on করার পরেও Bot সেই
-Command-এর জন্য কোনো নির্দিষ্ট কাজ করতে
-পারবে না।
-
-বর্তমান কোডে handler আছে:
-
-/menu
-/bot
-/rules
-/admin
-/members
-/groupinfo
-/id
-/ping
-/deal
-/ডিল
-/piyas
-/website
-
-=========================================================
-*/
