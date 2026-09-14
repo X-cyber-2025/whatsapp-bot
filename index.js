@@ -31,6 +31,7 @@ const WEBSITE_URL =
 const AUTH_DIR = "./auth_info";
 const PAIRING_NUMBER_FILE = "./pairing_number.txt";
 const BOT_STATUS_FILE = "./bot_status.json";
+const COMMAND_STATUS_FILE = "./command_status.json";
 
 let sock = null;
 let reconnecting = false;
@@ -43,6 +44,53 @@ const lidToPhoneJid = new Map();
 const logger = P({
   level: "silent"
 });
+
+/* =========================================================
+   ADMIN-ONLY COMMANDS
+   এখানে command যোগ করলে শুধু Admin ব্যবহার করতে পারবে।
+========================================================= */
+
+const ADMIN_ONLY_COMMANDS = new Set([
+  "/botoff",
+  "/boton"
+]);
+
+/* =========================================================
+   PROTECTED COMMANDS
+   এগুলো সাধারণভাবে OFF করা যাবে না।
+========================================================= */
+
+const PROTECTED_COMMANDS = new Set([
+  "/botoff",
+  "/boton",
+  "/commandoff",
+  "/commandon",
+  "/cmdlist"
+]);
+
+/* =========================================================
+   ALL COMMANDS
+========================================================= */
+
+const ALL_COMMANDS = [
+  "/menu",
+  "/bot",
+  "/rules",
+  "/admin",
+  "/members",
+  "/groupinfo",
+  "/id",
+  "/ping",
+  "/deal",
+  "/ডিল",
+  "/piyas",
+  "/website",
+  "/botoff",
+  "/boton",
+  "/commandoff",
+  "/commandon",
+  "/cmdlist"
+];
 
 /* =========================================================
    BOT STATUS
@@ -101,6 +149,116 @@ function setBotStatus(groupId, enabled) {
 }
 
 loadBotStatus();
+
+/* =========================================================
+   COMMAND STATUS
+========================================================= */
+
+let commandStatus = {};
+
+function loadCommandStatus() {
+  try {
+    if (!fs.existsSync(COMMAND_STATUS_FILE)) {
+      commandStatus = {};
+      return;
+    }
+
+    const data = fs.readFileSync(
+      COMMAND_STATUS_FILE,
+      "utf8"
+    );
+
+    commandStatus = JSON.parse(data) || {};
+
+    console.log("📂 Command status loaded.");
+
+  } catch (error) {
+    console.log(
+      "⚠️ Command status load error:",
+      error?.message
+    );
+
+    commandStatus = {};
+  }
+}
+
+function saveCommandStatus() {
+  try {
+    fs.writeFileSync(
+      COMMAND_STATUS_FILE,
+      JSON.stringify(commandStatus, null, 2),
+      "utf8"
+    );
+  } catch (error) {
+    console.log(
+      "⚠️ Command status save error:",
+      error?.message
+    );
+  }
+}
+
+function isCommandEnabled(
+  groupId,
+  command
+) {
+  if (!groupId || !command) {
+    return true;
+  }
+
+  if (!commandStatus[groupId]) {
+    return true;
+  }
+
+  return commandStatus[groupId][command] !== false;
+}
+
+function setCommandStatus(
+  groupId,
+  command,
+  enabled
+) {
+  if (!groupId || !command) {
+    return;
+  }
+
+  if (!commandStatus[groupId]) {
+    commandStatus[groupId] = {};
+  }
+
+  commandStatus[groupId][command] =
+    Boolean(enabled);
+
+  saveCommandStatus();
+}
+
+function normalizeCommand(command) {
+  if (!command) {
+    return "";
+  }
+
+  let value =
+    String(command)
+      .trim()
+      .toLowerCase();
+
+  if (!value.startsWith("/")) {
+    value = "/" + value;
+  }
+
+  return value.split(/\s+/)[0];
+}
+
+function isAdminOnlyCommand(command) {
+  return ADMIN_ONLY_COMMANDS.has(
+    normalizeCommand(command)
+  );
+}
+
+function isKnownCommand(command) {
+  return ALL_COMMANDS.includes(
+    normalizeCommand(command)
+  );
+}
 
 /* =========================================================
    HTTP SERVER
@@ -1153,58 +1311,132 @@ function getMessageText(message) {
    MENU
 ========================================================= */
 
-const MENU_TEXT = `
+function getMenuText(
+  isAdmin = false,
+  groupId = null
+) {
+  const commandIsOn = command =>
+    !groupId ||
+    isCommandEnabled(
+      groupId,
+      command
+    );
+
+  let groupCommands = "";
+
+  if (commandIsOn("/menu")) {
+    groupCommands +=
+      "│ 1️⃣ /menu\n";
+  }
+
+  if (commandIsOn("/bot")) {
+    groupCommands +=
+      "│ 2️⃣ /bot\n";
+  }
+
+  if (commandIsOn("/rules")) {
+    groupCommands +=
+      "│ 3️⃣ /rules\n";
+  }
+
+  if (commandIsOn("/admin")) {
+    groupCommands +=
+      "│ 4️⃣ /admin\n";
+  }
+
+  if (commandIsOn("/members")) {
+    groupCommands +=
+      "│ 5️⃣ /members\n";
+  }
+
+  if (commandIsOn("/groupinfo")) {
+    groupCommands +=
+      "│ 6️⃣ /groupinfo\n";
+  }
+
+  if (commandIsOn("/id")) {
+    groupCommands +=
+      "│ 7️⃣ /id\n";
+  }
+
+  let utilityCommands = "";
+
+  if (commandIsOn("/ping")) {
+    utilityCommands +=
+      "│ 8️⃣ /ping\n";
+  }
+
+  let dealCommands = "";
+
+  if (
+    commandIsOn("/deal") ||
+    commandIsOn("/ডিল")
+  ) {
+    dealCommands +=
+      "│ 9️⃣ /deal /ডিল\n";
+  }
+
+  let piyasCommands = "";
+
+  if (commandIsOn("/piyas")) {
+    piyasCommands +=
+      "│ 🔟 /piyas\n";
+  }
+
+  let websiteCommands = "";
+
+  if (commandIsOn("/website")) {
+    websiteCommands +=
+      "│ 1️⃣1️⃣ /website\n";
+  }
+
+  let adminSection = "";
+
+  if (isAdmin) {
+    adminSection = `
+╭─❖ 👑 *ADMIN CONTROL*
+│
+│ 🔴 /botoff
+│ 🟢 /boton
+│ ⚙️ /commandoff /command
+│ ⚙️ /commandon /command
+│ 📋 /cmdlist
+│
+╰────────────────────
+`;
+  }
+
+  return `
 ╭━━━━━━━━━━━━━━━━━━━━╮
         🤖 *BOT MENU*
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-╭─❖ 👑 *GROUP COMMANDS*
+╭─❖ 👥 *GROUP COMMANDS*
 │
-│ 1️⃣ /menu
-│ 2️⃣ /bot
-│ 3️⃣ /rules
-│ 4️⃣ /admin
-│ 5️⃣ /members
-│ 6️⃣ /groupinfo
-│ 7️⃣ /id
-│
-╰────────────────────
+${groupCommands}╰────────────────────
 
 ╭─❖ ⚙️ *UTILITY*
 │
-│ 8️⃣ /ping
-│
-╰────────────────────
+${utilityCommands}╰────────────────────
 
 ╭─❖ 💰 *BUY / SELL*
 │
-│ 9️⃣ /deal /ডিল
-│
-╰────────────────────
+${dealCommands}╰────────────────────
 
 ╭─❖ 🤍 *PIYAS*
 │
-│ 🔟 /piyas
-│
-╰────────────────────
+${piyasCommands}╰────────────────────
 
-╭─❖ 🌐 *Our Official Website*
+╭─❖ 🌐 *OUR WEBSITE*
 │
-│ 1️⃣1️⃣ /website
-│
-╰────────────────────
+${websiteCommands}╰────────────────────
 
-╭─❖ 🤖 *BOT CONTROL*
-│
-│ 🔴 /botoff
-│ 🟢 /boton
-│
-╰────────────────────
-
+${adminSection}
 ━━━━━━━━━━━━━━━━━━━━
         🤖 *PIYAS BOT*
 ━━━━━━━━━━━━━━━━━━━━
 `;
+}
 
 /* =========================================================
    RULES
@@ -1375,7 +1607,7 @@ Admin-এর মাধ্যমে Deal করুন।
 `;
 
 /* =========================================================
-   BOT CONTROL NOTICE
+   BOT CONTROL
 ========================================================= */
 
 const BOT_OFF_TEXT = `
@@ -1406,6 +1638,308 @@ const BOT_ALREADY_ON_TEXT = `
 
 বট ইতোমধ্যে ON আছে।
 `;
+
+/* =========================================================
+   COMMAND CONTROL
+========================================================= */
+
+async function handleCommandControl(
+  remoteJid,
+  message,
+  command,
+  text
+) {
+  /* =======================================================
+     /commandoff
+  ======================================================= */
+
+  if (command === "/commandoff") {
+    const admin =
+      await isSenderAdmin(
+        remoteJid,
+        message
+      );
+
+    if (!admin) {
+      return true;
+    }
+
+    const parts =
+      text
+        .trim()
+        .split(/\s+/);
+
+    if (parts.length < 2) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text: `
+⚙️ *COMMAND OFF*
+
+ব্যবহার:
+
+/commandoff /command
+
+উদাহরণ:
+
+/commandoff /deal
+
+/commandoff /website
+`
+        }
+      );
+
+      return true;
+    }
+
+    const targetCommand =
+      normalizeCommand(
+        parts[1]
+      );
+
+    if (
+      !isKnownCommand(
+        targetCommand
+      )
+    ) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            `❌ *${targetCommand}* নামে কোনো Command পাওয়া যায়নি।`
+        }
+      );
+
+      return true;
+    }
+
+    if (
+      PROTECTED_COMMANDS.has(
+        targetCommand
+      )
+    ) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            `🔒 *${targetCommand}* Protected Command। এটি OFF করা যাবে না।`
+        }
+      );
+
+      return true;
+    }
+
+    if (
+      !isCommandEnabled(
+        remoteJid,
+        targetCommand
+      )
+    ) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            `🔴 *${targetCommand}* ইতোমধ্যে OFF আছে।`
+        }
+      );
+
+      return true;
+    }
+
+    setCommandStatus(
+      remoteJid,
+      targetCommand,
+      false
+    );
+
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text:
+          `🔴 *COMMAND OFF*\n\n${targetCommand} এখন এই Group-এ বন্ধ করা হয়েছে।`
+      }
+    );
+
+    console.log(
+      `🔴 Command OFF | ${targetCommand} | ${remoteJid}`
+    );
+
+    return true;
+  }
+
+  /* =======================================================
+     /commandon
+  ======================================================= */
+
+  if (command === "/commandon") {
+    const admin =
+      await isSenderAdmin(
+        remoteJid,
+        message
+      );
+
+    if (!admin) {
+      return true;
+    }
+
+    const parts =
+      text
+        .trim()
+        .split(/\s+/);
+
+    if (parts.length < 2) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text: `
+⚙️ *COMMAND ON*
+
+ব্যবহার:
+
+/commandon /command
+
+উদাহরণ:
+
+/commandon /deal
+
+/commandon /website
+`
+        }
+      );
+
+      return true;
+    }
+
+    const targetCommand =
+      normalizeCommand(
+        parts[1]
+      );
+
+    if (
+      !isKnownCommand(
+        targetCommand
+      )
+    ) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            `❌ *${targetCommand}* নামে কোনো Command পাওয়া যায়নি।`
+        }
+      );
+
+      return true;
+    }
+
+    if (
+      isCommandEnabled(
+        remoteJid,
+        targetCommand
+      )
+    ) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            `🟢 *${targetCommand}* ইতোমধ্যে ON আছে।`
+        }
+      );
+
+      return true;
+    }
+
+    setCommandStatus(
+      remoteJid,
+      targetCommand,
+      true
+    );
+
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text:
+          `🟢 *COMMAND ON*\n\n${targetCommand} এখন আবার চালু করা হয়েছে।`
+      }
+    );
+
+    console.log(
+      `🟢 Command ON | ${targetCommand} | ${remoteJid}`
+    );
+
+    return true;
+  }
+
+  /* =======================================================
+     /cmdlist
+  ======================================================= */
+
+  if (command === "/cmdlist") {
+    const admin =
+      await isSenderAdmin(
+        remoteJid,
+        message
+      );
+
+    if (!admin) {
+      return true;
+    }
+
+    const lines =
+      ALL_COMMANDS.map(
+        cmd => {
+          const status =
+            isCommandEnabled(
+              remoteJid,
+              cmd
+            )
+              ? "🟢 ON"
+              : "🔴 OFF";
+
+          const protectedMark =
+            PROTECTED_COMMANDS.has(
+              cmd
+            )
+              ? " 🔒"
+              : "";
+
+          const adminMark =
+            ADMIN_ONLY_COMMANDS.has(
+              cmd
+            )
+              ? " 👑"
+              : "";
+
+          return `${cmd} → ${status}${protectedMark}${adminMark}`;
+        }
+      );
+
+    await sock.sendMessage(
+      remoteJid,
+      {
+        text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+      ⚙️ *COMMAND STATUS*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+${lines.join("\n")}
+
+━━━━━━━━━━━━━━━━━━━━
+
+🟢 ON
+🔴 OFF
+🔒 Protected
+👑 Admin Only
+
+🤍 *Piyas*
+`
+      }
+    );
+
+    return true;
+  }
+
+  return false;
+}
 
 /* =========================================================
    DEAL MESSAGE
@@ -1534,7 +2068,7 @@ async function sendDealNotice(remoteJid) {
 }
 
 /* =========================================================
-   WELCOME MESSAGE
+   WELCOME
 ========================================================= */
 
 async function sendWelcome(
@@ -2228,12 +2762,57 @@ async function startBot() {
           }
 
           const command =
-            text
-              .split(/\s+/)[0]
-              .toLowerCase();
+            normalizeCommand(
+              text
+                .split(/\s+/)[0]
+            );
+
+          if (!command) {
+            return;
+          }
 
           /* ===============================================
-             BOT OFF
+             ADMIN-ONLY COMMAND
+          =============================================== */
+
+          if (
+            isAdminOnlyCommand(
+              command
+            )
+          ) {
+            const admin =
+              await isSenderAdmin(
+                remoteJid,
+                message
+              );
+
+            /*
+               সাধারণ Member হলে কোনো response নেই।
+            */
+
+            if (!admin) {
+              return;
+            }
+          }
+
+          /* ===============================================
+             COMMAND CONTROL
+          =============================================== */
+
+          const controlHandled =
+            await handleCommandControl(
+              remoteJid,
+              message,
+              command,
+              text
+            );
+
+          if (controlHandled) {
+            return;
+          }
+
+          /* ===============================================
+             BOT OFF / ON
           =============================================== */
 
           if (
@@ -2285,11 +2864,6 @@ async function startBot() {
             return;
           }
 
-          /* ===============================================
-             BOT ON
-             Command: /boton
-          =============================================== */
-
           if (
             command === "/boton"
           ) {
@@ -2340,12 +2914,28 @@ async function startBot() {
           }
 
           /* ===============================================
-             BOT OFF হলে অন্য command বন্ধ
+             BOT OFF হলে অন্য Command বন্ধ
           =============================================== */
 
           if (
             !isBotEnabled(
               remoteJid
+            )
+          ) {
+            return;
+          }
+
+          /* ===============================================
+             নির্দিষ্ট Command OFF কিনা
+          =============================================== */
+
+          if (
+            !PROTECTED_COMMANDS.has(
+              command
+            ) &&
+            !isCommandEnabled(
+              remoteJid,
+              command
             )
           ) {
             return;
@@ -2359,11 +2949,20 @@ async function startBot() {
             command === "/menu" ||
             command === "/bot"
           ) {
+            const admin =
+              await isSenderAdmin(
+                remoteJid,
+                message
+              );
+
             await sock.sendMessage(
               remoteJid,
               {
                 text:
-                  MENU_TEXT
+                  getMenuText(
+                    admin,
+                    remoteJid
+                  )
               }
             );
 
