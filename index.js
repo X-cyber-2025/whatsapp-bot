@@ -19,7 +19,14 @@ import P from "pino";
 
 const PORT = Number(process.env.PORT || 3000);
 
-const GROUP_IDS = (process.env.GROUP_ID || "")
+/*
+ * .env:
+ *
+ * ALLOWED_GROUPS=GROUP_ID_1,GROUP_ID_2
+ *
+ * শুধুমাত্র এই দুই গ্রুপে Bot কাজ করবে।
+ */
+const GROUP_IDS = (process.env.ALLOWED_GROUPS || "")
   .split(",")
   .map(v => v.trim())
   .filter(Boolean);
@@ -35,16 +42,15 @@ const PAIRING_NUMBER_FILE = "./pairing_number.txt";
 const BOT_STATUS_FILE = "./bot_status.json";
 
 /*
- * Duplicate spam protection
- *
- * একই Member একই Message ৫ মিনিটের মধ্যে
- * আবার পাঠালে Message Delete হবে।
+ * একই Member একই Message
+ * ৫ মিনিটের মধ্যে আবার পাঠালে
+ * Spam হিসেবে Delete হবে।
  */
 const DUPLICATE_SPAM_WINDOW = 5 * 60 * 1000;
 
 /*
- * একই Member-কে Warning বারবার পাঠানো আটকাতে
- * ১০ সেকেন্ড cooldown।
+ * একই Member-কে Warning
+ * ১০ সেকেন্ডের মধ্যে বারবার পাঠাবে না।
  */
 const WARNING_COOLDOWN = 10 * 1000;
 
@@ -61,7 +67,7 @@ const lidToPhoneJid = new Map();
  *
  * groupId
  *   -> senderJid
- *      -> messageHash
+ *      -> messageText
  *         -> lastTime
  */
 const duplicateMessageCache = new Map();
@@ -209,9 +215,7 @@ function loadBotStatus() {
       const [groupId, value]
       of Object.entries(botStatus)
     ) {
-      if (
-        typeof value === "boolean"
-      ) {
+      if (typeof value === "boolean") {
         botStatus[groupId] = {
           enabled: value,
           disabledCommands: []
@@ -237,9 +241,7 @@ function loadBotStatus() {
       }
     }
 
-    console.log(
-      "📂 Bot status loaded."
-    );
+    console.log("📂 Bot status loaded.");
   } catch (error) {
     console.log(
       "⚠️ Bot status load error:",
@@ -300,16 +302,12 @@ function setBotStatus(
 ) {
   getGroupStatus(
     groupId
-  ).enabled = Boolean(
-    enabled
-  );
+  ).enabled = Boolean(enabled);
 
   saveBotStatus();
 }
 
-function normalizeCommandName(
-  command
-) {
+function normalizeCommandName(command) {
   if (!command) {
     return "";
   }
@@ -320,49 +318,34 @@ function normalizeCommandName(
     .replace(/^\/+/, "");
 }
 
-function getCanonicalCommand(
-  command
-) {
+function getCanonicalCommand(command) {
   const normalized =
-    normalizeCommandName(
-      command
-    );
+    normalizeCommandName(command);
 
   if (!normalized) {
     return "";
   }
 
   return (
-    COMMAND_ALIASES[
-      normalized
-    ] ||
+    COMMAND_ALIASES[normalized] ||
     normalized
   );
 }
 
-function getCommandDefinition(
-  command
-) {
+function getCommandDefinition(command) {
   const key =
-    getCanonicalCommand(
-      command
-    );
+    getCanonicalCommand(command);
 
   return (
     COMMAND_DEFINITIONS.find(
-      item =>
-        item.key === key
+      item => item.key === key
     ) || null
   );
 }
 
-function isKnownCommand(
-  command
-) {
+function isKnownCommand(command) {
   return Boolean(
-    getCommandDefinition(
-      command
-    )
+    getCommandDefinition(command)
   );
 }
 
@@ -371,9 +354,7 @@ function isCommandEnabled(
   command
 ) {
   const name =
-    getCanonicalCommand(
-      command
-    );
+    getCanonicalCommand(command);
 
   if (!name) {
     return true;
@@ -381,9 +362,7 @@ function isCommandEnabled(
 
   return !getGroupStatus(
     groupId
-  ).disabledCommands.includes(
-    name
-  );
+  ).disabledCommands.includes(name);
 }
 
 function setCommandStatus(
@@ -392,18 +371,14 @@ function setCommandStatus(
   enabled
 ) {
   const name =
-    getCanonicalCommand(
-      command
-    );
+    getCanonicalCommand(command);
 
   if (!name) {
     return false;
   }
 
   const status =
-    getGroupStatus(
-      groupId
-    );
+    getGroupStatus(groupId);
 
   const list =
     status.disabledCommands;
@@ -435,9 +410,7 @@ loadBotStatus();
 const server =
   http.createServer(
     (req, res) => {
-      if (
-        req.url === "/health"
-      ) {
+      if (req.url === "/health") {
         res.writeHead(
           200,
           {
@@ -449,10 +422,8 @@ const server =
         res.end(
           JSON.stringify({
             status: "online",
-            bot:
-              "WhatsApp Group Bot",
-            connected:
-              !!sock,
+            bot: "WhatsApp Group Bot",
+            connected: !!sock,
             groups:
               GROUP_IDS.length
                 ? GROUP_IDS
@@ -484,16 +455,14 @@ server.listen(
       `🌐 Server running on port ${PORT}`
     );
 
-    if (
-      GROUP_IDS.length
-    ) {
+    if (GROUP_IDS.length) {
       console.log(
         "🎯 Allowed Groups:",
         GROUP_IDS.join(", ")
       );
     } else {
       console.log(
-        "🎯 Allowed Groups: ALL"
+        "⚠️ Allowed Groups: ALL"
       );
     }
   }
@@ -533,9 +502,7 @@ function readSavedPairingNumber() {
   }
 }
 
-function savePairingNumber(
-  number
-) {
+function savePairingNumber(number) {
   try {
     fs.writeFileSync(
       PAIRING_NUMBER_FILE,
@@ -550,9 +517,7 @@ function savePairingNumber(
   }
 }
 
-function getCredentialPhoneNumber(
-  creds
-) {
+function getCredentialPhoneNumber(creds) {
   const id =
     creds?.me?.id;
 
@@ -630,9 +595,7 @@ function isLidJid(jid) {
   );
 }
 
-function phoneNumberToJid(
-  phone
-) {
+function phoneNumberToJid(phone) {
   if (!phone) {
     return null;
   }
@@ -803,9 +766,7 @@ function saveLidMapping(
   );
 }
 
-async function resolveLidToPhoneJid(
-  lid
-) {
+async function resolveLidToPhoneJid(lid) {
   if (!lid) {
     return null;
   }
@@ -850,9 +811,7 @@ async function resolveLidToPhoneJid(
       const phoneJid =
         isPhoneJid(pn)
           ? pn
-          : phoneNumberToJid(
-              pn
-            );
+          : phoneNumberToJid(pn);
 
       if (phoneJid) {
         saveLidMapping(
@@ -1197,9 +1156,7 @@ async function cacheParticipants(
    GROUP HELPERS
 ========================================================= */
 
-function isGroupAllowed(
-  jid
-) {
+function isGroupAllowed(jid) {
   if (
     !jid ||
     !jid.endsWith("@g.us")
@@ -1213,25 +1170,18 @@ function isGroupAllowed(
     return true;
   }
 
-  return GROUP_IDS.includes(
-    jid
-  );
+  return GROUP_IDS.includes(jid);
 }
 
 function isAdminParticipant(
   participant = {}
 ) {
   return (
-    participant.admin ===
-      "admin" ||
-    participant.admin ===
-      "superadmin" ||
-    participant.admin ===
-      true ||
-    participant.isAdmin ===
-      true ||
-    participant.isSuperAdmin ===
-      true
+    participant.admin === "admin" ||
+    participant.admin === "superadmin" ||
+    participant.admin === true ||
+    participant.isAdmin === true ||
+    participant.isSuperAdmin === true
   );
 }
 
@@ -1239,10 +1189,8 @@ function isOwnerParticipant(
   participant = {}
 ) {
   return (
-    participant.admin ===
-      "superadmin" ||
-    participant.isSuperAdmin ===
-      true
+    participant.admin === "superadmin" ||
+    participant.isSuperAdmin === true
   );
 }
 
@@ -1283,9 +1231,7 @@ async function isSenderAdmin(
     const participantJid =
       message?.key?.participant;
 
-    if (
-      !participantJid
-    ) {
+    if (!participantJid) {
       return false;
     }
 
@@ -1295,8 +1241,7 @@ async function isSenderAdmin(
       );
 
     const participants =
-      metadata?.participants ||
-      [];
+      metadata?.participants || [];
 
     await cacheParticipants(
       participants
@@ -1314,28 +1259,13 @@ async function isSenderAdmin(
           participantJid
         );
 
-      if (
-        senderPhone
-      ) {
+      if (senderPhone) {
         sender =
           findParticipant(
             participants,
             senderPhone
           );
       }
-    }
-
-    if (!sender) {
-      sender =
-        participants.find(
-          participant =>
-            participant?.id ===
-              participantJid ||
-            participant?.lid ===
-              participantJid ||
-            participant?.phoneNumber ===
-              participantJid
-        );
     }
 
     if (!sender) {
@@ -1367,8 +1297,7 @@ function makeCopyButton(
 
     buttonParamsJson:
       JSON.stringify({
-        display_text:
-          "📋 Copy",
+        display_text: "📋 Copy",
 
         id:
           "copy_" +
@@ -1606,8 +1535,6 @@ ${
 }
 ╰────────────────────
 
-━━━━━━━━━━━━━━━━━━━━
-        
 ━━━━━━━━━━━━━━━━━━━━
 `;
 }
@@ -2298,9 +2225,7 @@ async function sendDealNotice(
    WELCOME
 ========================================================= */
 
-function getWelcomeText(
-  name
-) {
+function getWelcomeText(name) {
   return `
 ╭━━━━━━━━━━━━━━━━━━━━╮
         🎉 *স্বাগতম*
@@ -2347,9 +2272,7 @@ async function sendWelcome(
   try {
     if (
       !sock ||
-      !isBotEnabled(
-        groupId
-      )
+      !isBotEnabled(groupId)
     ) {
       return;
     }
@@ -2363,54 +2286,42 @@ async function sendWelcome(
         );
 
       await cacheParticipants(
-        metadata?.participants ||
-          []
+        metadata?.participants || []
       );
     } catch {}
 
     let member =
       findParticipant(
-        metadata?.participants ||
-          [],
+        metadata?.participants || [],
         participant?.id
       );
 
     if (!member) {
       member =
         findParticipant(
-          metadata?.participants ||
-            [],
+          metadata?.participants || [],
           participant?.lid
         );
     }
 
     if (!member) {
-      member =
-        participant;
+      member = participant;
     }
 
     const name =
-      getDisplayName(
-        member
-      );
+      getDisplayName(member);
 
     const phoneJid =
-      await getPhoneJid(
-        member
-      );
+      await getPhoneJid(member);
 
     if (
-      isPhoneJid(
-        phoneJid
-      )
+      isPhoneJid(phoneJid)
     ) {
       await sock.sendMessage(
         groupId,
         {
           text:
-            getWelcomeText(
-              name
-            ),
+            getWelcomeText(name),
           mentions: [
             phoneJid
           ]
@@ -2421,12 +2332,11 @@ async function sendWelcome(
         groupId,
         {
           text:
-            getWelcomeText(
-              name
-            ).replace(
-              `@${name}`,
-              name
-            )
+            getWelcomeText(name)
+              .replace(
+                `@${name}`,
+                name
+              )
         }
       );
     }
@@ -2522,21 +2432,11 @@ async function generatePairingCode(
       return;
     }
 
-    const savedNumber =
-      readSavedPairingNumber();
-
-    if (
-      savedNumber &&
-      savedNumber ===
-        PHONE_NUMBER
-    ) {
-      console.log(
-        "ℹ️ Same PHONE_NUMBER detected."
-      );
-
-      return;
-    }
-
+    /*
+     * পুরোনো pairing_number.txt থাকলেও
+     * নতুন session-এর জন্য pairing code
+     * block করবে না।
+     */
     if (
       pairingRequested
     ) {
@@ -2544,10 +2444,6 @@ async function generatePairingCode(
     }
 
     pairingRequested = true;
-
-    console.log(
-      `📱 Pairing Number: ${PHONE_NUMBER}`
-    );
 
     console.log(
       "🔐 Generating WhatsApp Pairing Code..."
@@ -2607,9 +2503,7 @@ async function generatePairingCode(
    MESSAGE TEXT
 ========================================================= */
 
-function getMessageText(
-  message
-) {
+function getMessageText(message) {
   const msg =
     message?.message;
 
@@ -2636,23 +2530,11 @@ function getMessageText(
    LINK DETECTOR
 ========================================================= */
 
-function containsLink(
-  text = ""
-) {
+function containsLink(text = "") {
   if (!text) {
     return false;
   }
 
-  /*
-   * Detect:
-   *
-   * https://example.com
-   * http://example.com
-   * www.example.com
-   * example.com
-   *
-   * এবং জনপ্রিয় কিছু platform link।
-   */
   const linkRegex =
     /(?:https?:\/\/|www\.|(?:wa\.me|chat\.whatsapp\.com|t\.me|telegram\.me|youtu\.be|youtube\.com|facebook\.com|fb\.me|instagram\.com|tiktok\.com|bit\.ly|tinyurl\.com)\/|\b[a-zA-Z0-9-]+\.(?:com|net|org|io|me|co|bd|xyz|site|online|shop|app|dev)(?:\/[^\s]*)?)/i;
 
@@ -2755,9 +2637,6 @@ async function sendSpamWarning(
         cooldownKey
       ) || 0;
 
-    /*
-     * খুব ঘন ঘন Warning পাঠাবে না।
-     */
     if (
       now - lastWarning <
       WARNING_COOLDOWN
@@ -2821,9 +2700,7 @@ Admin-এর অনুমতি নিন।
             senderJid
           );
 
-    if (
-      phoneJid
-    ) {
+    if (phoneJid) {
       await sock.sendMessage(
         remoteJid,
         {
@@ -2870,9 +2747,7 @@ function isDuplicateSpam(
   }
 
   const normalizedText =
-    normalizeSpamText(
-      text
-    );
+    normalizeSpamText(text);
 
   if (!normalizedText) {
     return false;
@@ -2913,10 +2788,6 @@ function isDuplicateSpam(
       senderJid
     );
 
-  /*
-   * ৫ মিনিটের পুরোনো Message
-   * cache থেকে পরিষ্কার।
-   */
   for (
     const [
       messageHash,
@@ -2926,7 +2797,7 @@ function isDuplicateSpam(
   ) {
     if (
       now - messageTime >
-        DUPLICATE_SPAM_WINDOW
+      DUPLICATE_SPAM_WINDOW
     ) {
       senderCache.delete(
         messageHash
@@ -2934,10 +2805,6 @@ function isDuplicateSpam(
     }
   }
 
-  /*
-   * একই Message আগে ৫ মিনিটের মধ্যে
-   * পাঠানো হয়েছিল কি না।
-   */
   const previousTime =
     senderCache.get(
       normalizedText
@@ -2946,12 +2813,12 @@ function isDuplicateSpam(
   if (
     previousTime &&
     now - previousTime <
-      DUPLICATE_SPAM_WINDOW
+    DUPLICATE_SPAM_WINDOW
   ) {
     /*
-     * সময় update করা হচ্ছে যাতে
-     * বারবার পাঠানো duplicate message
-     * প্রতিবার ধরা পড়ে।
+     * Timestamp update করলে
+     * প্রতিবার duplicate পাঠালেই
+     * সেটা আবার ধরা হবে।
      */
     senderCache.set(
       normalizedText,
@@ -2961,9 +2828,6 @@ function isDuplicateSpam(
     return true;
   }
 
-  /*
-   * প্রথমবার Message।
-   */
   senderCache.set(
     normalizedText,
     now
@@ -2990,10 +2854,6 @@ async function moderateGroupMessage(
       return false;
     }
 
-    /*
-     * Bot নিজের Message-এর উপর
-     * moderation চালাবে না।
-     */
     if (
       message.key?.fromMe
     ) {
@@ -3043,9 +2903,7 @@ async function moderateGroupMessage(
           message
         );
 
-      if (
-        deleted
-      ) {
+      if (deleted) {
         await sendSpamWarning(
           remoteJid,
           senderJid,
@@ -3067,9 +2925,7 @@ async function moderateGroupMessage(
         text
       );
 
-    if (
-      duplicate
-    ) {
+    if (duplicate) {
       console.log(
         `🚫 DUPLICATE SPAM BLOCKED: ${remoteJid}`
       );
@@ -3080,9 +2936,7 @@ async function moderateGroupMessage(
           message
         );
 
-      if (
-        deleted
-      ) {
+      if (deleted) {
         await sendSpamWarning(
           remoteJid,
           senderJid,
@@ -3114,9 +2968,6 @@ setInterval(
       const now =
         Date.now();
 
-      /*
-       * Duplicate cache cleanup
-       */
       for (
         const [
           groupId,
@@ -3140,7 +2991,7 @@ setInterval(
           ) {
             if (
               now - messageTime >
-                DUPLICATE_SPAM_WINDOW
+              DUPLICATE_SPAM_WINDOW
             ) {
               senderCache.delete(
                 messageHash
@@ -3166,9 +3017,6 @@ setInterval(
         }
       }
 
-      /*
-       * Warning cooldown cleanup
-       */
       for (
         const [
           key,
@@ -3178,7 +3026,7 @@ setInterval(
       ) {
         if (
           now - warningTime >
-            WARNING_COOLDOWN
+          WARNING_COOLDOWN
         ) {
           warningCooldown.delete(
             key
@@ -3232,14 +3080,6 @@ async function startBot() {
 
       console.log(
         "🔄 PHONE NUMBER CHANGED"
-      );
-
-      console.log(
-        `Old: ${currentCredPhone}`
-      );
-
-      console.log(
-        `New: ${PHONE_NUMBER}`
       );
 
       console.log(
@@ -3359,8 +3199,7 @@ async function startBot() {
             event?.action;
 
           const participants =
-            event?.participants ||
-            [];
+            event?.participants || [];
 
           if (!groupId) {
             return;
@@ -3456,6 +3295,7 @@ async function startBot() {
             );
 
             reconnecting = false;
+            pairingRequested = false;
 
             try {
               const groups =
@@ -3467,8 +3307,7 @@ async function startBot() {
                 )
               ) {
                 await cacheParticipants(
-                  group?.participants ||
-                    []
+                  group?.participants || []
                 );
               }
 
@@ -3503,7 +3342,6 @@ async function startBot() {
             );
 
             sock = null;
-
             pairingRequested = false;
 
             if (
@@ -3528,10 +3366,6 @@ async function startBot() {
             ) {
               console.log(
                 "🚪 WhatsApp session logged out."
-              );
-
-              console.log(
-                "ℹ️ New number দিলে নতুন Pairing Code generate হবে."
               );
             }
           }
@@ -3570,9 +3404,6 @@ async function startBot() {
                 continue;
               }
 
-              /*
-               * Bot নিজের Message ignore
-               */
               if (
                 message.key?.fromMe
               ) {
@@ -3596,7 +3427,8 @@ async function startBot() {
               }
 
               /*
-               * GROUP_ID check
+               * শুধুমাত্র .env-এর
+               * দুইটি Group
                */
               if (
                 !isGroupAllowed(
@@ -3631,13 +3463,6 @@ async function startBot() {
                  LINK + SPAM PROTECTION
               ============================================= */
 
-              /*
-               * Link অথবা duplicate spam হলে
-               * Message delete করে এখানেই stop।
-               *
-               * ফলে deleted message কোনো
-               * Bot command হিসেবে process হবে না।
-               */
               const moderationHandled =
                 await moderateGroupMessage(
                   remoteJid,
@@ -3663,8 +3488,7 @@ async function startBot() {
                   );
 
               const rawCommand =
-                parts.shift() ||
-                "";
+                parts.shift() || "";
 
               const command =
                 normalizeCommandName(
@@ -3810,8 +3634,7 @@ async function startBot() {
                 command === "off"
               ) {
                 const targetRaw =
-                  args[0] ||
-                  "";
+                  args[0] || "";
 
                 const target =
                   getCanonicalCommand(
@@ -3901,10 +3724,6 @@ ${COMMAND_DEFINITIONS
                   continue;
                 }
 
-                /* =========================================
-                   OFF
-                ========================================= */
-
                 if (
                   command ===
                   "off"
@@ -3960,10 +3779,6 @@ ${COMMAND_DEFINITIONS
 
                   continue;
                 }
-
-                /* =========================================
-                   ON
-                ========================================= */
 
                 if (
                   command ===
@@ -4092,10 +3907,8 @@ ${COMMAND_DEFINITIONS
               ============================================= */
 
               if (
-                commandAlias ===
-                  "menu" ||
-                commandAlias ===
-                  "bot"
+                commandAlias === "menu" ||
+                commandAlias === "bot"
               ) {
                 await sendPublicMenu(
                   remoteJid
@@ -4414,8 +4227,7 @@ ${COMMAND_DEFINITIONS
               );
 
               console.log(
-                messageError?.stack ||
-                  ""
+                messageError?.stack || ""
               );
             }
           }
@@ -4447,9 +4259,7 @@ ${COMMAND_DEFINITIONS
 
     sock = null;
 
-    if (
-      !reconnecting
-    ) {
+    if (!reconnecting) {
       reconnecting = true;
 
       setTimeout(
