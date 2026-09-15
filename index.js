@@ -29,6 +29,22 @@ const AUTH_DIR = "./auth_info";
 const PAIRING_NUMBER_FILE = "./pairing_number.txt";
 const BOT_STATUS_FILE = "./bot_status.json";
 
+/*
+  ==========================================================
+  ALLOWED GROUPS
+  ==========================================================
+
+  এই দুইটি Group ID-তেই Bot কাজ করবে।
+
+  Bot-এর WhatsApp Number Group Admin না হলেও
+  এই Group ID তালিকায় থাকলে Bot কাজ করবে।
+*/
+
+const ALLOWED_GROUPS = [
+  "120363428127558997@g.us",
+  "120363410799321594@g.us"
+];
+
 let sock = null;
 let reconnecting = false;
 let pairingRequested = false;
@@ -66,6 +82,7 @@ const COMMAND_ALIASES = {
 /*
   যেসব কমান্ড শুধু Admin / Owner ব্যবহার করতে পারবে
 */
+
 const ADMIN_ONLY_COMMANDS = new Set([
   "adminpanel",
   "cmdlist",
@@ -74,7 +91,6 @@ const ADMIN_ONLY_COMMANDS = new Set([
   "boton",
   "botoff",
 
-  // Full Bot Control
   "offbot",
   "onbot",
   "fullbotstatus"
@@ -84,6 +100,7 @@ const ADMIN_ONLY_COMMANDS = new Set([
   Full Bot Off অবস্থায় এগুলো Admin / Owner-এর জন্য
   সবসময় চালু থাকবে।
 */
+
 const PROTECTED_COMMANDS = new Set([
   "adminpanel",
   "cmdlist",
@@ -106,23 +123,36 @@ function loadBotStatus() {
   try {
     if (fs.existsSync(BOT_STATUS_FILE)) {
       botStatus = JSON.parse(
-        fs.readFileSync(BOT_STATUS_FILE, "utf8")
+        fs.readFileSync(
+          BOT_STATUS_FILE,
+          "utf8"
+        )
       );
     }
   } catch (e) {
-    console.log("Bot status load error:", e.message);
+    console.log(
+      "Bot status load error:",
+      e.message
+    );
+
     botStatus = {};
   }
 
-  /*
-    পুরোনো status file থাকলেও নতুন structure কাজ করবে
-  */
-  for (const groupId of Object.keys(botStatus)) {
-    if (typeof botStatus[groupId] === "boolean") {
+  for (
+    const groupId of Object.keys(botStatus)
+  ) {
+    if (
+      typeof botStatus[groupId] ===
+      "boolean"
+    ) {
       botStatus[groupId] = {
-        enabled: botStatus[groupId],
+        enabled:
+          botStatus[groupId],
+
         disabledCommands: [],
+
         fullBotOff: false,
+
         adminAllowedCommands: []
       };
     }
@@ -135,16 +165,26 @@ function loadBotStatus() {
       botStatus[groupId].enabled !== false;
 
     botStatus[groupId].disabledCommands =
-      Array.isArray(botStatus[groupId].disabledCommands)
-        ? botStatus[groupId].disabledCommands
+      Array.isArray(
+        botStatus[groupId]
+          .disabledCommands
+      )
+        ? botStatus[groupId]
+            .disabledCommands
         : [];
 
     botStatus[groupId].fullBotOff =
-      botStatus[groupId].fullBotOff === true;
+      botStatus[groupId]
+        .fullBotOff === true;
 
-    botStatus[groupId].adminAllowedCommands =
-      Array.isArray(botStatus[groupId].adminAllowedCommands)
-        ? botStatus[groupId].adminAllowedCommands
+    botStatus[groupId]
+      .adminAllowedCommands =
+      Array.isArray(
+        botStatus[groupId]
+          .adminAllowedCommands
+      )
+        ? botStatus[groupId]
+            .adminAllowedCommands
         : [];
   }
 
@@ -155,10 +195,17 @@ function saveBotStatus() {
   try {
     fs.writeFileSync(
       BOT_STATUS_FILE,
-      JSON.stringify(botStatus, null, 2)
+      JSON.stringify(
+        botStatus,
+        null,
+        2
+      )
     );
   } catch (e) {
-    console.log("Bot status save error:", e.message);
+    console.log(
+      "Bot status save error:",
+      e.message
+    );
   }
 }
 
@@ -172,50 +219,98 @@ function ensureGroupStatus(groupId) {
     };
   }
 
-  if (!Array.isArray(botStatus[groupId].disabledCommands)) {
-    botStatus[groupId].disabledCommands = [];
+  if (
+    !Array.isArray(
+      botStatus[groupId]
+        .disabledCommands
+    )
+  ) {
+    botStatus[groupId]
+      .disabledCommands = [];
   }
 
-  if (!Array.isArray(botStatus[groupId].adminAllowedCommands)) {
-    botStatus[groupId].adminAllowedCommands = [];
+  if (
+    !Array.isArray(
+      botStatus[groupId]
+        .adminAllowedCommands
+    )
+  ) {
+    botStatus[groupId]
+      .adminAllowedCommands = [];
   }
 
-  if (typeof botStatus[groupId].enabled !== "boolean") {
-    botStatus[groupId].enabled = true;
+  if (
+    typeof botStatus[groupId]
+      .enabled !== "boolean"
+  ) {
+    botStatus[groupId]
+      .enabled = true;
   }
 
-  if (typeof botStatus[groupId].fullBotOff !== "boolean") {
-    botStatus[groupId].fullBotOff = false;
+  if (
+    typeof botStatus[groupId]
+      .fullBotOff !== "boolean"
+  ) {
+    botStatus[groupId]
+      .fullBotOff = false;
   }
 
   return botStatus[groupId];
 }
 
 function isBotEnabled(groupId) {
-  return ensureGroupStatus(groupId).enabled;
+  return ensureGroupStatus(
+    groupId
+  ).enabled;
 }
 
-function setBotEnabled(groupId, enabled) {
-  ensureGroupStatus(groupId).enabled = enabled;
+function setBotEnabled(
+  groupId,
+  enabled
+) {
+  ensureGroupStatus(
+    groupId
+  ).enabled = enabled;
+
   saveBotStatus();
 }
 
-function isCommandEnabled(groupId, command) {
-  const status = ensureGroupStatus(groupId);
+function isCommandEnabled(
+  groupId,
+  command
+) {
+  const status =
+    ensureGroupStatus(
+      groupId
+    );
 
-  return !status.disabledCommands.includes(command);
+  return !status
+    .disabledCommands
+    .includes(command);
 }
 
-function setCommandEnabled(groupId, command, enabled) {
-  const status = ensureGroupStatus(groupId);
+function setCommandEnabled(
+  groupId,
+  command,
+  enabled
+) {
+  const status =
+    ensureGroupStatus(
+      groupId
+    );
 
   if (enabled) {
     status.disabledCommands =
-      status.disabledCommands.filter(
-        c => c !== command
-      );
-  } else if (!status.disabledCommands.includes(command)) {
-    status.disabledCommands.push(command);
+      status.disabledCommands
+        .filter(
+          c => c !== command
+        );
+  } else if (
+    !status.disabledCommands
+      .includes(command)
+  ) {
+    status.disabledCommands
+      .push(command);
   }
 
   saveBotStatus();
@@ -225,50 +320,103 @@ function setCommandEnabled(groupId, command, enabled) {
    FULL BOT OFF
 ========================================================= */
 
-function isFullBotOff(groupId) {
-  return ensureGroupStatus(groupId).fullBotOff === true;
+function isFullBotOff(
+  groupId
+) {
+  return ensureGroupStatus(
+    groupId
+  ).fullBotOff === true;
 }
 
-function setFullBotOff(groupId, enabled) {
-  ensureGroupStatus(groupId).fullBotOff = enabled;
+function setFullBotOff(
+  groupId,
+  enabled
+) {
+  ensureGroupStatus(
+    groupId
+  ).fullBotOff = enabled;
+
   saveBotStatus();
 }
 
-function getAdminAllowedCommands(groupId) {
-  return ensureGroupStatus(groupId).adminAllowedCommands;
+function getAdminAllowedCommands(
+  groupId
+) {
+  return ensureGroupStatus(
+    groupId
+  ).adminAllowedCommands;
 }
 
-function setAdminAllowedCommands(groupId, commands) {
-  ensureGroupStatus(groupId).adminAllowedCommands =
+function setAdminAllowedCommands(
+  groupId,
+  commands
+) {
+  ensureGroupStatus(
+    groupId
+  ).adminAllowedCommands =
     [...new Set(commands)];
 
   saveBotStatus();
 }
 
-function normalizeCommand(command) {
-  let cmd = String(command || "")
-    .trim()
-    .toLowerCase();
+function normalizeCommand(
+  command
+) {
+  let cmd =
+    String(command || "")
+      .trim()
+      .toLowerCase();
 
   if (cmd.startsWith("/")) {
     cmd = cmd.slice(1);
   }
 
   if (COMMAND_ALIASES[cmd]) {
-    cmd = COMMAND_ALIASES[cmd];
+    cmd =
+      COMMAND_ALIASES[cmd];
   }
 
   return cmd;
 }
 
-function isAdminAllowedCommand(groupId, command) {
-  const cmd = normalizeCommand(command);
+function isAdminAllowedCommand(
+  groupId,
+  command
+) {
+  const cmd =
+    normalizeCommand(
+      command
+    );
 
-  if (PROTECTED_COMMANDS.has(cmd)) {
+  if (
+    PROTECTED_COMMANDS.has(
+      cmd
+    )
+  ) {
     return true;
   }
 
-  return getAdminAllowedCommands(groupId).includes(cmd);
+  return getAdminAllowedCommands(
+    groupId
+  ).includes(cmd);
+}
+
+/* =========================================================
+   GROUP ID CHECK
+========================================================= */
+
+/*
+  এখন থেকে Group ID whitelist-ই মূল access system।
+
+  Bot Number Admin হওয়া বাধ্যতামূলক নয়।
+*/
+
+function isGroupAllowed(
+  groupId
+) {
+  return ALLOWED_GROUPS.includes(
+    normalizeJid(groupId)
+  );
 }
 
 /* =========================================================
@@ -276,19 +424,42 @@ function isAdminAllowedCommand(groupId, command) {
 ========================================================= */
 
 http
-  .createServer((req, res) => {
-    res.writeHead(200, {
-      "Content-Type": "text/plain; charset=utf-8"
-    });
+  .createServer(
+    (req, res) => {
+      res.writeHead(
+        200,
+        {
+          "Content-Type":
+            "text/plain; charset=utf-8"
+        }
+      );
 
-    res.end(
-      "PIYAS BOT is running.\n" +
-      "Access: automatically works in groups where the connected number is Admin."
-    );
-  })
-  .listen(PORT, () => {
-    console.log(`HTTP server running on port ${PORT}`);
-  });
+      res.end(
+        "PIYAS BOT is running.\n" +
+        "Bot works only in the configured Allowed Groups."
+      );
+    }
+  )
+  .listen(
+    PORT,
+    () => {
+      console.log(
+        `HTTP server running on port ${PORT}`
+      );
+
+      console.log(
+        "Allowed Groups:"
+      );
+
+      for (
+        const groupId of ALLOWED_GROUPS
+      ) {
+        console.log(
+          `✅ ${groupId}`
+        );
+      }
+    }
+  );
 
 /* =========================================================
    PAIRING NUMBER
@@ -296,18 +467,30 @@ http
 
 function readSavedPairingNumber() {
   try {
-    if (fs.existsSync(PAIRING_NUMBER_FILE)) {
+    if (
+      fs.existsSync(
+        PAIRING_NUMBER_FILE
+      )
+    ) {
       return fs
-        .readFileSync(PAIRING_NUMBER_FILE, "utf8")
+        .readFileSync(
+          PAIRING_NUMBER_FILE,
+          "utf8"
+        )
         .trim()
-        .replace(/[^0-9]/g, "");
+        .replace(
+          /[^0-9]/g,
+          ""
+        );
     }
   } catch {}
 
   return "";
 }
 
-function savePairingNumber(number) {
+function savePairingNumber(
+  number
+) {
   try {
     fs.writeFileSync(
       PAIRING_NUMBER_FILE,
@@ -318,22 +501,32 @@ function savePairingNumber(number) {
 
 function getCredentialsNumber() {
   try {
-    const file = `${AUTH_DIR}/creds.json`;
+    const file =
+      `${AUTH_DIR}/creds.json`;
 
-    if (!fs.existsSync(file)) {
+    if (
+      !fs.existsSync(file)
+    ) {
       return "";
     }
 
-    const creds = JSON.parse(
-      fs.readFileSync(file, "utf8")
-    );
+    const creds =
+      JSON.parse(
+        fs.readFileSync(
+          file,
+          "utf8"
+        )
+      );
 
     return String(
       creds?.me?.id || ""
     )
       .split(":")[0]
       .split("@")[0]
-      .replace(/[^0-9]/g, "");
+      .replace(
+        /[^0-9]/g,
+        ""
+      );
   } catch {
     return "";
   }
@@ -344,13 +537,19 @@ function getCredentialsNumber() {
 ========================================================= */
 
 function resetAuthIfNumberChanged() {
-  if (!PHONE_NUMBER) return;
+  if (!PHONE_NUMBER) {
+    return;
+  }
 
-  const savedNumber = readSavedPairingNumber();
-  const credentialNumber = getCredentialsNumber();
+  const savedNumber =
+    readSavedPairingNumber();
+
+  const credentialNumber =
+    getCredentialsNumber();
 
   const knownNumber =
-    credentialNumber || savedNumber;
+    credentialNumber ||
+    savedNumber;
 
   if (
     knownNumber &&
@@ -361,37 +560,53 @@ function resetAuthIfNumberChanged() {
     );
 
     try {
-      fs.rmSync(AUTH_DIR, {
-        recursive: true,
-        force: true
-      });
+      fs.rmSync(
+        AUTH_DIR,
+        {
+          recursive: true,
+          force: true
+        }
+      );
     } catch {}
 
     pairingRequested = false;
   }
 
-  savePairingNumber(PHONE_NUMBER);
+  savePairingNumber(
+    PHONE_NUMBER
+  );
 }
 
 /* =========================================================
    JID HELPERS
 ========================================================= */
 
-function normalizeJid(jid = "") {
+function normalizeJid(
+  jid = ""
+) {
   return String(jid)
     .trim()
     .toLowerCase();
 }
 
-function phoneFromJid(jid = "") {
+function phoneFromJid(
+  jid = ""
+) {
   return String(jid)
     .split("@")[0]
     .split(":")[0]
-    .replace(/[^0-9]/g, "");
+    .replace(
+      /[^0-9]/g,
+      ""
+    );
 }
 
-function isGroupJid(jid = "") {
-  return jid.endsWith("@g.us");
+function isGroupJid(
+  jid = ""
+) {
+  return jid.endsWith(
+    "@g.us"
+  );
 }
 
 function getBotJid() {
@@ -401,7 +616,9 @@ function getBotJid() {
 }
 
 function getBotPhoneJid() {
-  if (!PHONE_NUMBER) return "";
+  if (!PHONE_NUMBER) {
+    return "";
+  }
 
   return `${PHONE_NUMBER}@s.whatsapp.net`;
 }
@@ -410,7 +627,9 @@ function getBotPhoneJid() {
    NAME HELPERS
 ========================================================= */
 
-function getPushName(message) {
+function getPushName(
+  message
+) {
   return (
     message?.pushName ||
     message?.verifiedBizName ||
@@ -418,23 +637,36 @@ function getPushName(message) {
   );
 }
 
-function getParticipantName(participant) {
-  if (!participant) return "Unknown";
+function getParticipantName(
+  participant
+) {
+  if (!participant) {
+    return "Unknown";
+  }
 
-  const jid = normalizeJid(
-    participant.id || ""
-  );
+  const jid =
+    normalizeJid(
+      participant.id || ""
+    );
 
   const phoneJid =
-    contactPhoneJids.get(jid) || jid;
+    contactPhoneJids.get(
+      jid
+    ) || jid;
 
   return (
     participant.notify ||
     participant.name ||
     participant.pushName ||
-    contactNames.get(jid) ||
-    contactNames.get(phoneJid) ||
-    phoneFromJid(phoneJid) ||
+    contactNames.get(
+      jid
+    ) ||
+    contactNames.get(
+      phoneJid
+    ) ||
+    phoneFromJid(
+      phoneJid
+    ) ||
     "Unknown"
   );
 }
@@ -443,20 +675,27 @@ function getParticipantName(participant) {
    LID MAPPING
 ========================================================= */
 
-function updateLidMapping(contact) {
-  if (!contact) return;
+function updateLidMapping(
+  contact
+) {
+  if (!contact) {
+    return;
+  }
 
-  const id = normalizeJid(
-    contact.id || ""
-  );
+  const id =
+    normalizeJid(
+      contact.id || ""
+    );
 
-  const lid = normalizeJid(
-    contact.lid || ""
-  );
+  const lid =
+    normalizeJid(
+      contact.lid || ""
+    );
 
-  const jid = normalizeJid(
-    contact.jid || ""
-  );
+  const jid =
+    normalizeJid(
+      contact.jid || ""
+    );
 
   if (lid && jid) {
     lidToPhoneJid.set(
@@ -467,7 +706,9 @@ function updateLidMapping(contact) {
 
   if (
     id.endsWith("@lid") &&
-    jid.endsWith("@s.whatsapp.net")
+    jid.endsWith(
+      "@s.whatsapp.net"
+    )
   ) {
     lidToPhoneJid.set(
       id,
@@ -480,12 +721,17 @@ function updateLidMapping(contact) {
    CONTACT CACHE
 ========================================================= */
 
-function cacheContact(contact) {
-  if (!contact) return;
+function cacheContact(
+  contact
+) {
+  if (!contact) {
+    return;
+  }
 
-  const id = normalizeJid(
-    contact.id || ""
-  );
+  const id =
+    normalizeJid(
+      contact.id || ""
+    );
 
   const name =
     contact.notify ||
@@ -500,13 +746,16 @@ function cacheContact(contact) {
     );
   }
 
-  const jid = normalizeJid(
-    contact.jid || ""
-  );
+  const jid =
+    normalizeJid(
+      contact.jid || ""
+    );
 
   if (
     id.endsWith("@lid") &&
-    jid.endsWith("@s.whatsapp.net")
+    jid.endsWith(
+      "@s.whatsapp.net"
+    )
   ) {
     contactPhoneJids.set(
       id,
@@ -520,7 +769,9 @@ function cacheContact(contact) {
   }
 
   if (
-    id.endsWith("@s.whatsapp.net")
+    id.endsWith(
+      "@s.whatsapp.net"
+    )
   ) {
     contactPhoneJids.set(
       id,
@@ -528,27 +779,40 @@ function cacheContact(contact) {
     );
   }
 
-  updateLidMapping(contact);
+  updateLidMapping(
+    contact
+  );
 }
 
 /* =========================================================
    PARTICIPANT HELPERS
 ========================================================= */
 
-function isAdminParticipant(participant) {
-  if (!participant) return false;
+function isAdminParticipant(
+  participant
+) {
+  if (!participant) {
+    return false;
+  }
 
   return (
-    participant.admin === "admin" ||
-    participant.admin === "superadmin"
+    participant.admin ===
+      "admin" ||
+    participant.admin ===
+      "superadmin"
   );
 }
 
-function isOwnerParticipant(participant) {
-  if (!participant) return false;
+function isOwnerParticipant(
+  participant
+) {
+  if (!participant) {
+    return false;
+  }
 
   return (
-    participant.admin === "superadmin"
+    participant.admin ===
+    "superadmin"
   );
 }
 
@@ -556,52 +820,77 @@ function findParticipant(
   metadata,
   jid
 ) {
-  const target = normalizeJid(jid);
+  const target =
+    normalizeJid(jid);
 
   const participants =
-    metadata?.participants || [];
+    metadata?.participants ||
+    [];
 
-  return participants.find(p => {
-    const pid = normalizeJid(
-      p.id || ""
-    );
+  return participants.find(
+    p => {
+      const pid =
+        normalizeJid(
+          p.id || ""
+        );
 
-    if (pid === target) {
-      return true;
-    }
+      if (
+        pid === target
+      ) {
+        return true;
+      }
 
-    if (
-      pid.endsWith("@lid") &&
-      target.endsWith("@s.whatsapp.net")
-    ) {
+      if (
+        pid.endsWith("@lid") &&
+        target.endsWith(
+          "@s.whatsapp.net"
+        )
+      ) {
+        return (
+          lidToPhoneJid.get(
+            pid
+          ) === target
+        );
+      }
+
+      if (
+        target.endsWith("@lid") &&
+        pid.endsWith(
+          "@s.whatsapp.net"
+        )
+      ) {
+        return (
+          lidToPhoneJid.get(
+            target
+          ) === pid
+        );
+      }
+
       return (
-        lidToPhoneJid.get(pid) === target
+        phoneFromJid(
+          pid
+        ) ===
+        phoneFromJid(
+          target
+        )
       );
     }
-
-    if (
-      target.endsWith("@lid") &&
-      pid.endsWith("@s.whatsapp.net")
-    ) {
-      return (
-        lidToPhoneJid.get(target) === pid
-      );
-    }
-
-    return (
-      phoneFromJid(pid) ===
-      phoneFromJid(target)
-    );
-  });
+  );
 }
 
 /* =========================================================
    BOT ADMIN CHECK
-========================================================= */
+   NOTE:
+   Group Access-এর জন্য আর ব্যবহার করা হচ্ছে না।
+   ========================================================= */
 
-async function isBotAdminInGroup(groupId) {
+async function isBotAdminInGroup(
+  groupId
+) {
   try {
-    if (!sock) return false;
+    if (!sock) {
+      return false;
+    }
 
     const metadata =
       await sock.groupMetadata(
@@ -620,7 +909,10 @@ async function isBotAdminInGroup(groupId) {
         botJid
       );
 
-    if (!participant && botPhoneJid) {
+    if (
+      !participant &&
+      botPhoneJid
+    ) {
       participant =
         findParticipant(
           metadata,
@@ -628,13 +920,22 @@ async function isBotAdminInGroup(groupId) {
         );
     }
 
-    if (!participant && PHONE_NUMBER) {
+    if (
+      !participant &&
+      PHONE_NUMBER
+    ) {
       participant =
-        (metadata.participants || [])
-          .find(p =>
-            phoneFromJid(p.id) ===
+        (
+          metadata
+            .participants ||
+          []
+        ).find(
+          p =>
+            phoneFromJid(
+              p.id
+            ) ===
             PHONE_NUMBER
-          );
+        );
     }
 
     if (!participant) {
@@ -647,12 +948,6 @@ async function isBotAdminInGroup(groupId) {
   } catch (e) {
     return false;
   }
-}
-
-async function isGroupAllowed(groupId) {
-  return await isBotAdminInGroup(
-    groupId
-  );
 }
 
 /* =========================================================
@@ -670,7 +965,8 @@ async function isSenderAdmin(
       );
 
     const sender =
-      message?.key?.participant ||
+      message?.key
+        ?.participant ||
       message?.participant ||
       "";
 
@@ -697,11 +993,20 @@ function createCopyButton(
 ) {
   return {
     name: "cta_copy",
-    buttonParamsJson: JSON.stringify({
-      display_text: "📋 Copy",
-      id: `copy_${normalizeCommand(command)}`,
-      copy_code: command
-    })
+
+    buttonParamsJson:
+      JSON.stringify({
+        display_text:
+          "📋 Copy",
+
+        id:
+          `copy_${normalizeCommand(
+            command
+          )}`,
+
+        copy_code:
+          command
+      })
   };
 }
 
@@ -714,14 +1019,20 @@ async function sendCopyMenu(
   title,
   commands
 ) {
-  const body = commands
-    .map(c => `• ${c}`)
-    .join("\n");
+  const body =
+    commands
+      .map(
+        c => `• ${c}`
+      )
+      .join("\n");
 
-  const buttons = commands.map(
-    command =>
-      createCopyButton(command)
-  );
+  const buttons =
+    commands.map(
+      command =>
+        createCopyButton(
+          command
+        )
+    );
 
   const message =
     generateWAMessageFromContent(
@@ -730,28 +1041,38 @@ async function sendCopyMenu(
         viewOnceMessage: {
           message: {
             interactiveMessage:
-              proto.Message.InteractiveMessage.create(
-                {
-                  body: proto.Message.InteractiveMessage.Body.create(
-                    {
-                      text:
-                        `${title}\n\n${body}`
-                    }
-                  ),
+              proto.Message
+                .InteractiveMessage
+                .create(
+                  {
+                    body:
+                      proto.Message
+                        .InteractiveMessage
+                        .Body
+                        .create(
+                          {
+                            text:
+                              `${title}\n\n${body}`
+                          }
+                        ),
 
-                  nativeFlowMessage:
-                    proto.Message.InteractiveMessage.NativeFlowMessage.create(
-                      {
-                        buttons
-                      }
-                    )
-                }
-              )
+                    nativeFlowMessage:
+                      proto.Message
+                        .InteractiveMessage
+                        .NativeFlowMessage
+                        .create(
+                          {
+                            buttons
+                          }
+                        )
+                  }
+                )
           }
         }
       },
       {
-        userJid: jid
+        userJid:
+          jid
       }
     );
 
@@ -769,7 +1090,9 @@ async function sendCopyMenu(
    SMALL BOT MENU
 ========================================================= */
 
-async function sendBotMenu(jid) {
+async function sendBotMenu(
+  jid
+) {
   const menuText = `
 ╭━━━━━━━━━━━━━━━━━━╮
        🤖 BOT MENU
@@ -830,7 +1153,9 @@ async function sendBotMenu(jid) {
   const buttons =
     commands.map(
       command =>
-        createCopyButton(command)
+        createCopyButton(
+          command
+        )
     );
 
   const message =
@@ -840,28 +1165,38 @@ async function sendBotMenu(jid) {
         viewOnceMessage: {
           message: {
             interactiveMessage:
-              proto.Message.InteractiveMessage.create(
-                {
-                  body:
-                    proto.Message.InteractiveMessage.Body.create(
-                      {
-                        text: menuText
-                      }
-                    ),
+              proto.Message
+                .InteractiveMessage
+                .create(
+                  {
+                    body:
+                      proto.Message
+                        .InteractiveMessage
+                        .Body
+                        .create(
+                          {
+                            text:
+                              menuText
+                          }
+                        ),
 
-                  nativeFlowMessage:
-                    proto.Message.InteractiveMessage.NativeFlowMessage.create(
-                      {
-                        buttons
-                      }
-                    )
-                }
-              )
+                    nativeFlowMessage:
+                      proto.Message
+                        .InteractiveMessage
+                        .NativeFlowMessage
+                        .create(
+                          {
+                            buttons
+                          }
+                        )
+                  }
+                )
           }
         }
       },
       {
-        userJid: jid
+        userJid:
+          jid
       }
     );
 
@@ -1064,16 +1399,16 @@ Admin-এর সাথে যোগাযোগ করুন।
 `;
 
 /* =========================================================
-   FULL BOT STATUS TEXT
+   FULL BOT STATUS
 ========================================================= */
 
 async function sendFullBotStatus(
   jid
 ) {
-  const groupId = jid;
-
   const status =
-    ensureGroupStatus(groupId);
+    ensureGroupStatus(
+      jid
+    );
 
   const fullStatus =
     status.fullBotOff
@@ -1085,9 +1420,11 @@ async function sendFullBotStatus(
 
   const allowedText =
     allowed.length
-      ? allowed.map(
-          c => `• /${c}`
-        ).join("\n")
+      ? allowed
+          .map(
+            c => `• /${c}`
+          )
+          .join("\n")
       : "• শুধু Protected Commands";
 
   const text = `
@@ -1102,19 +1439,19 @@ ${allowedText}
 
 ━━━━━━━━━━━━━━━━━━
 
-📌 OFF করতে:
+📌 OFF:
 /offbot
 
-📌 Admin-এর নির্দিষ্ট command চালু রাখতে:
+📌 নির্দিষ্ট command:
 /offbot menu admin
 
-📌 সব command Admin-এর জন্য চালু রাখতে:
+📌 সব command Admin-এর জন্য:
 /offbot all
 
-📌 কোনো normal command চালু না রাখতে:
+📌 কোনো normal command নয়:
 /offbot none
 
-📌 আবার পুরো Bot ON:
+📌 আবার ON:
 /onbot
 `;
 
@@ -1139,9 +1476,6 @@ async function handleFullBotOffCommand(
       .join(" ")
       .trim();
 
-  /*
-    /offbot all
-  */
   if (
     input.toLowerCase() ===
     "all"
@@ -1182,9 +1516,6 @@ async function handleFullBotOffCommand(
     return;
   }
 
-  /*
-    /offbot none
-  */
   if (
     input.toLowerCase() ===
     "none"
@@ -1220,14 +1551,13 @@ async function handleFullBotOffCommand(
     return;
   }
 
-  /*
-    /offbot menu admin
-  */
   if (input) {
     const commands =
       input
         .split(/\s+/)
-        .map(normalizeCommand)
+        .map(
+          normalizeCommand
+        )
         .filter(Boolean);
 
     const validCommands =
@@ -1282,9 +1612,6 @@ ${allowedText}
     return;
   }
 
-  /*
-    শুধু /offbot
-  */
   setFullBotOff(
     jid,
     true
@@ -1308,11 +1635,11 @@ ${allowedText}
 শুধু Bot Control Commands
 চালু থাকবে।
 
-📌 নির্দিষ্ট command চালু রাখতে:
+📌 নির্দিষ্ট command:
 
 /offbot menu admin
 
-📌 সব command Admin-এর জন্য:
+📌 সব command:
 
 /offbot all
 
@@ -1350,8 +1677,8 @@ async function handleFullBotOnCommand(
 Bot আবার সবার জন্য
 চালু হয়েছে। ✅
 
-📌 Group-এর Bot Admin থাকা
-সাপেক্ষে command কাজ করবে।
+📌 এই Group ID Allowed List-এ আছে,
+তাই Bot এখানে কাজ করবে।
 `
     }
   );
@@ -1367,7 +1694,9 @@ function getMessageText(
   const msg =
     message?.message;
 
-  if (!msg) return "";
+  if (!msg) {
+    return "";
+  }
 
   if (
     msg.conversation
@@ -1379,21 +1708,24 @@ function getMessageText(
     msg.extendedTextMessage
       ?.text
   ) {
-    return msg.extendedTextMessage.text;
+    return msg.extendedTextMessage
+      .text;
   }
 
   if (
     msg.imageMessage
       ?.caption
   ) {
-    return msg.imageMessage.caption;
+    return msg.imageMessage
+      .caption;
   }
 
   if (
     msg.videoMessage
       ?.caption
   ) {
-    return msg.videoMessage.caption;
+    return msg.videoMessage
+      .caption;
   }
 
   return "";
@@ -1403,12 +1735,16 @@ function getMessageText(
    PARSE COMMAND
 ========================================================= */
 
-function parseCommand(text) {
+function parseCommand(
+  text
+) {
   const trimmed =
     String(text || "")
       .trim();
 
-  if (!trimmed.startsWith("/")) {
+  if (
+    !trimmed.startsWith("/")
+  ) {
     return {
       command: "",
       args: []
@@ -1442,24 +1778,26 @@ async function sendWelcome(
   action
 ) {
   try {
-    if (!sock) return;
+    if (!sock) {
+      return;
+    }
+
+    /*
+      এখন Welcome-ও শুধু Allowed Group-এ যাবে।
+      Bot Admin হওয়া লাগবে না।
+    */
 
     if (
-      !await isBotAdminInGroup(
+      !isGroupAllowed(
         groupId
       )
     ) {
       return;
     }
 
-    const name =
-      getParticipantName(
-        {
-          id: participant
-        }
-      );
-
-    if (action === "add") {
+    if (
+      action === "add"
+    ) {
       await sock.sendMessage(
         groupId,
         {
@@ -1487,7 +1825,9 @@ Welcome @${phoneFromJid(
       );
     }
 
-    if (action === "remove") {
+    if (
+      action === "remove"
+    ) {
       await sock.sendMessage(
         groupId,
         {
@@ -1521,7 +1861,9 @@ Group থেকে বের হয়ে গেছেন।
 ========================================================= */
 
 async function startBot() {
-  if (reconnecting) return;
+  if (reconnecting) {
+    return;
+  }
 
   reconnecting = true;
 
@@ -1531,9 +1873,10 @@ async function startBot() {
     const {
       state,
       saveCreds
-    } = await useMultiFileAuthState(
-      AUTH_DIR
-    );
+    } =
+      await useMultiFileAuthState(
+        AUTH_DIR
+      );
 
     sock =
       makeWASocket({
@@ -1541,14 +1884,16 @@ async function startBot() {
 
         logger,
 
-        printQRInTerminal: false,
+        printQRInTerminal:
+          false,
 
         browser:
           Browsers.macOS(
             "Chrome"
           ),
 
-        syncFullHistory: false,
+        syncFullHistory:
+          false,
 
         generateHighQualityLinkPreview:
           false
@@ -1560,13 +1905,16 @@ async function startBot() {
     );
 
     /* =====================================================
-       LID / CONTACT UPDATE
+       CONTACT UPDATE
     ===================================================== */
 
     sock.ev.on(
       "contacts.upsert",
       contacts => {
-        for (const contact of contacts) {
+        for (
+          const contact
+          of contacts
+        ) {
           cacheContact(
             contact
           );
@@ -1577,7 +1925,10 @@ async function startBot() {
     sock.ev.on(
       "contacts.update",
       contacts => {
-        for (const contact of contacts) {
+        for (
+          const contact
+          of contacts
+        ) {
           cacheContact(
             contact
           );
@@ -1599,8 +1950,12 @@ async function startBot() {
             action
           } = update;
 
+          /*
+            শুধু Allowed Group
+          */
+
           if (
-            !await isBotAdminInGroup(
+            !isGroupAllowed(
               id
             )
           ) {
@@ -1648,38 +2003,26 @@ async function startBot() {
             "✅ PIYAS BOT CONNECTED"
           );
 
-          /*
-            Group cache / bot admin count
-          */
-          try {
-            const groups =
-              await sock.groupFetchAllParticipating();
+          console.log(
+            "━━━━━━━━━━━━━━━━━━━━"
+          );
 
-            let adminGroups = 0;
+          console.log(
+            "✅ Allowed Groups:"
+          );
 
-            for (
-              const groupId
-              of Object.keys(groups)
-            ) {
-              const allowed =
-                await isBotAdminInGroup(
-                  groupId
-                );
-
-              if (allowed) {
-                adminGroups++;
-              }
-            }
-
+          for (
+            const groupId
+            of ALLOWED_GROUPS
+          ) {
             console.log(
-              `👥 Bot Admin in ${adminGroups} group(s)`
-            );
-          } catch (e) {
-            console.log(
-              "Group fetch error:",
-              e.message
+              `   ${groupId}`
             );
           }
+
+          console.log(
+            "━━━━━━━━━━━━━━━━━━━━"
+          );
         }
 
         if (
@@ -1798,7 +2141,8 @@ async function startBot() {
             }
 
             if (
-              message.key?.fromMe
+              message.key
+                ?.fromMe
             ) {
               continue;
             }
@@ -1806,12 +2150,14 @@ async function startBot() {
             const remoteJid =
               normalizeJid(
                 message.key
-                  ?.remoteJid || ""
+                  ?.remoteJid ||
+                ""
               );
 
             /*
               শুধু Group
             */
+
             if (
               !isGroupJid(
                 remoteJid
@@ -1821,11 +2167,18 @@ async function startBot() {
             }
 
             /*
-              Bot-এর connected number
-              Group Admin না হলে কাজ করবে না
+              =================================================
+              MAIN GROUP ACCESS CHECK
+              =================================================
+
+              এই Group ID Allowed List-এ না থাকলে
+              Bot কোনো command-এর উত্তর দেবে না।
+
+              Bot-এর নিজের Number Admin হওয়া লাগবে না।
             */
+
             if (
-              !await isGroupAllowed(
+              !isGroupAllowed(
                 remoteJid
               )
             ) {
@@ -1861,7 +2214,6 @@ async function startBot() {
 
             /* =============================================
                FULL BOT CONTROL
-               এগুলো Full Bot Off অবস্থাতেও কাজ করবে
             ============================================= */
 
             if (
@@ -1928,20 +2280,12 @@ async function startBot() {
                 remoteJid
               )
             ) {
-              /*
-                Full Bot Off হলে সাধারণ সদস্যের
-                কোনো command কাজ করবে না।
-              */
               if (
                 !senderIsAdmin
               ) {
                 continue;
               }
 
-              /*
-                Protected অথবা Admin-এর জন্য
-                নির্দিষ্ট করে চালু করা command
-              */
               if (
                 !isAdminAllowedCommand(
                   remoteJid,
@@ -2047,7 +2391,7 @@ async function startBot() {
             }
 
             /* =============================================
-               COMMAND ENABLE / DISABLE
+               COMMAND ENABLE
             ============================================= */
 
             if (
@@ -2092,6 +2436,10 @@ async function startBot() {
 
               continue;
             }
+
+            /* =============================================
+               COMMAND DISABLE
+            ============================================= */
 
             if (
               command ===
@@ -2138,7 +2486,6 @@ async function startBot() {
 
             /* =============================================
                NORMAL BOT STATUS
-               Full Bot Admin Access থাকলে override হবে
             ============================================= */
 
             if (
@@ -2243,8 +2590,7 @@ async function startBot() {
                       )
                   );
 
-                let text =
-                  `
+                let text = `
 ╭━━━━━━━━━━━━━━━━━━╮
        👑 GROUP ADMINS
 ╰━━━━━━━━━━━━━━━━━━╯
@@ -2268,6 +2614,7 @@ async function startBot() {
                   remoteJid,
                   {
                     text,
+
                     mentions:
                       admins.map(
                         a => a.id
@@ -2304,7 +2651,8 @@ async function startBot() {
                 const count =
                   metadata
                     ?.participants
-                    ?.length || 0;
+                    ?.length ||
+                  0;
 
                 await sock.sendMessage(
                   remoteJid,
@@ -2411,7 +2759,7 @@ ${owner}
                 remoteJid,
                 {
                   text:
-                    `🆔 Group ID:\n\n${remoteJid}`
+                    `🆔 *GROUP ID*\n\n${remoteJid}`
                 }
               );
 
@@ -2508,10 +2856,6 @@ ${owner}
 
               continue;
             }
-
-            /* =============================================
-               UNKNOWN COMMAND
-            ============================================= */
 
           } catch (e) {
             console.log(
