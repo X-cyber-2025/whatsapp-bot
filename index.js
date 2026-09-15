@@ -7,7 +7,8 @@ import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   generateWAMessageFromContent,
-  proto
+  proto,
+  downloadMediaMessage
 } from "@whiskeysockets/baileys";
 
 import { Boom } from "@hapi/boom";
@@ -26,6 +27,9 @@ const GROUP_IDS = (process.env.ALLOWED_GROUPS || "")
 
 const PHONE_NUMBER = (process.env.PHONE_NUMBER || "")
   .replace(/[^0-9]/g, "");
+
+const OPENAI_API_KEY =
+  process.env.OPENAI_API_KEY || "";
 
 const WEBSITE_URL =
   "https://x-cyber-2025.github.io/X-cyber.web/";
@@ -2660,10 +2664,6 @@ function normalizeSpamText(
 
 /* =========================================================
    DELETE GROUP MESSAGE
-   IMPORTANT:
-   - Bot must be Group Admin
-   - Keep original message.key
-   - Preserve participant/LID
 ========================================================= */
 
 async function deleteGroupMessage(
@@ -2993,6 +2993,435 @@ function isDuplicateSpam(
 }
 
 /* =========================================================
+   18+ IMAGE MODERATION
+   - Normal images are allowed.
+   - Only explicit/sexual images are removed.
+   - Admin/Owner images are ignored.
+   - Text is NOT checked here.
+========================================================= */
+
+async function isExplicitImage(message) {
+  try {
+    if (!message?.message) {
+      return false;
+    }
+
+    const imageMessage =
+      message.message.imageMessage;
+
+    if (!imageMessage) {
+      return false;
+    }
+
+    if (!OPENAI_API_KEY) {
+      console.log(
+        "⚠️ OPENAI_API_KEY missing. Image moderation skipped."
+      );
+
+      return false;
+    }
+
+    console.log(
+      "🔍 Checking image for 18+ content..."
+    );
+
+    /* =====================================================
+       DOWNLOAD IMAGE
+    ===================================================== */
+
+    const buffer =
+      await downloadMediaMessage(
+        message,
+        "buffer",
+        {},
+        {
+          logger,
+          reuploadRequest:
+            sock?.updateMediaMessage
+        }
+      );
+
+    if (!buffer) {
+      console.log(
+        "⚠️ Image download failed."
+      );
+
+      return false;
+    }
+
+    const mimeType =
+      imageMessage.mimetype ||
+      "image/jpeg";
+
+    const base64 =
+      Buffer.from(buffer).toString(
+        "base64"
+      );
+
+    const dataUrl =
+      `data:${mimeType};base64,${base64}`;
+
+    /* =====================================================
+       OPENAI MODERATION
+    ===================================================== */
+
+    const response =
+      await fetch(
+        "https://api.openai.com/v1/moderations",
+        {
+          method: "POST",
+
+          headers: {
+            "Content-Type":
+              "application/json",
+
+            "Authorization":
+              `Bearer ${OPENAI_API_KEY}`
+          },
+
+          body: JSON.stringify({
+            model:
+              "omni-moderation-latest",
+
+            input: [
+              {
+                type: "image_url",
+
+                image_url: {
+                  url: dataUrl
+                }
+              }
+            ]
+          })
+        }
+      );
+
+    if (!response.ok) {
+      const errorText =
+        await response.text();
+
+      console.log(
+        "⚠️ Image moderation API error:",
+        response.status,
+        errorText
+      );
+
+      return false;
+    }
+
+    const result =
+      await response.json();
+
+    const moderation =
+      result?.results?.[0];
+
+    if (!moderation) {
+      return false;
+    }
+
+    const categories =
+      moderation.categories || {};
+
+    /*
+       Only these categories are used.
+
+       Normal image:
+       sexual = false
+       sexual/minors = false
+
+       Explicit image:
+       sexual = true
+
+       Sexual content involving minors:
+       sexual/minors = true
+    */
+
+    const sexual =
+      Boolean(
+        categories.sexual
+      );
+
+    const sexualMinors =
+      Boolean(
+        categories["sexual/minors"]
+      );
+
+    if (
+      sexual ||
+      sexualMinors
+    ) {
+      console.log(
+        "🔞 EXPLICIT / 18+ IMAGE DETECTED"
+      );
+
+      return true;
+    }
+
+    console.log(
+      "🖼️ Normal image - allowed."
+    );
+
+    return false;
+
+  } catch (error) {
+    console.log(
+      "⚠️ Explicit image check error:",
+      error?.message
+    );
+
+    return false;
+  }
+}
+
+/* =========================================================
+   18+ IMAGE WARNING
+========================================================= */
+
+async function sendExplicitImageWarning(
+  remoteJid,
+  senderJid
+) {
+  try {
+    if (
+      !sock ||
+      !senderJid
+    ) {
+      return;
+    }
+
+    const warningText = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       🔞 *18+ IMAGE WARNING*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+🚫 এই Group-এ 18+ / অশালীন
+ছবি পাঠানো অনুমোদিত নয়।
+
+🗑️ আপনার ছবিটি Remove করা হয়েছে।
+
+⚠️ ভবিষ্যতে এমন ছবি পাঠানো
+থেকে বিরত থাকুন।
+
+👑 প্রয়োজন হলে Group Admin
+ব্যবস্থা নিতে পারেন।
+
+🤍 *PIYAS BOT*
+`;
+
+    const phoneJid =
+      isPhoneJid(senderJid)
+        ? senderJid
+        : await resolveLidToPhoneJid(
+            senderJid
+          );
+
+    if (phoneJid) {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            warningText +
+            `\n👤 @${phoneJid.split("@")[0]}`,
+
+          mentions: [
+            phoneJid
+          ]
+        }
+      );
+    } else {
+      await sock.sendMessage(
+        remoteJid,
+        {
+          text:
+            warningText
+        }
+      );
+    }
+
+  } catch (error) {
+    console.log(
+      "⚠️ Explicit image warning error:",
+      error?.message
+    );
+  }
+}
+
+/* =========================================================
+   MODERATE IMAGE MESSAGE
+========================================================= */
+
+async function moderateImageMessage(
+  remoteJid,
+  message
+) {
+  try {
+    if (
+      !sock ||
+      !remoteJid ||
+      !message
+    ) {
+      return false;
+    }
+
+    if (
+      message.key?.fromMe
+    ) {
+      return false;
+    }
+
+    const imageMessage =
+      message.message?.imageMessage;
+
+    /*
+       শুধু Image Message এখানে চেক হবে।
+
+       Text:
+       → No image moderation
+
+       Video:
+       → No image moderation
+
+       Document:
+       → No image moderation
+
+       Normal Photo:
+       → Allowed
+
+       18+ Photo:
+       → Remove
+    */
+
+    if (!imageMessage) {
+      return false;
+    }
+
+    const senderJid =
+      getMessageSenderId(
+        message
+      );
+
+    if (!senderJid) {
+      return false;
+    }
+
+    /* =====================================================
+       ADMIN / OWNER BYPASS
+    ===================================================== */
+
+    const senderIsAdmin =
+      await isSenderAdmin(
+        remoteJid,
+        message
+      );
+
+    if (senderIsAdmin) {
+      console.log(
+        "👑 Admin/Owner image - moderation skipped."
+      );
+
+      return false;
+    }
+
+    /* =====================================================
+       BOT ADMIN CHECK
+    ===================================================== */
+
+    const botAdmin =
+      await isBotAdmin(
+        remoteJid
+      );
+
+    if (!botAdmin) {
+      console.log(
+        "⚠️ Bot is NOT Group Admin. Cannot remove image."
+      );
+
+      return false;
+    }
+
+    /* =====================================================
+       CHECK IMAGE
+    ===================================================== */
+
+    const explicit =
+      await isExplicitImage(
+        message
+      );
+
+    /*
+       Normal image হলে এখানেই শেষ।
+    */
+
+    if (!explicit) {
+      return false;
+    }
+
+    /* =====================================================
+       DELETE EXPLICIT IMAGE
+    ===================================================== */
+
+    console.log(
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    );
+
+    console.log(
+      "🔞 18+ IMAGE DETECTED"
+    );
+
+    console.log(
+      `👥 GROUP: ${remoteJid}`
+    );
+
+    console.log(
+      `👤 SENDER: ${senderJid}`
+    );
+
+    console.log(
+      "🗑️ Removing explicit image..."
+    );
+
+    const deleted =
+      await deleteGroupMessage(
+        remoteJid,
+        message
+      );
+
+    if (deleted) {
+      await sendExplicitImageWarning(
+        remoteJid,
+        senderJid
+      );
+
+      console.log(
+        "✅ Explicit image removed successfully."
+      );
+    } else {
+      console.log(
+        "⚠️ Explicit image detected but delete failed."
+      );
+    }
+
+    console.log(
+      "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    );
+
+    return true;
+
+  } catch (error) {
+    console.log(
+      "⚠️ Image moderation error:",
+      error?.message
+    );
+
+    console.log(
+      error?.stack || ""
+    );
+
+    return false;
+  }
+}
+
+/* =========================================================
    MODERATION
 ========================================================= */
 
@@ -3043,6 +3472,21 @@ async function moderateGroupMessage(
       );
 
       return false;
+    }
+
+    /* =====================================================
+       18+ IMAGE MODERATION
+       This runs before text link/spam detection.
+    ===================================================== */
+
+    const imageHandled =
+      await moderateImageMessage(
+        remoteJid,
+        message
+      );
+
+    if (imageHandled) {
+      return true;
     }
 
     /* =====================================================
@@ -3155,6 +3599,7 @@ async function moderateGroupMessage(
     }
 
     return false;
+
   } catch (error) {
     console.log(
       "⚠️ Message moderation error:",
@@ -3244,6 +3689,7 @@ setInterval(
           );
         }
       }
+
     } catch (error) {
       console.log(
         "⚠️ Spam cache cleanup error:",
@@ -3451,6 +3897,7 @@ async function startBot() {
               participants
             );
           }
+
         } catch (error) {
           console.log(
             "❌ Group participant event error:",
@@ -3526,6 +3973,7 @@ async function startBot() {
               console.log(
                 "📦 Group participant cache loaded."
               );
+
             } catch (error) {
               console.log(
                 "⚠️ Group cache error:",
@@ -3573,6 +4021,7 @@ async function startBot() {
                 },
                 3000
               );
+
             } else if (
               !shouldReconnect
             ) {
@@ -3581,6 +4030,7 @@ async function startBot() {
               );
             }
           }
+
         } catch (error) {
           console.log(
             "❌ Connection update error:",
@@ -3652,12 +4102,13 @@ async function startBot() {
                   message
                 );
 
-              if (!text) {
-                continue;
-              }
+              /*
+                 Image-এর caption না থাকলেও
+                 image moderation চলবে।
+              */
 
               console.log(
-                `📩 MESSAGE: ${text}`
+                `📩 MESSAGE: ${text || "[MEDIA]"}`
               );
 
               console.log(
@@ -3665,7 +4116,7 @@ async function startBot() {
               );
 
               /* =============================================
-                 LINK + SPAM PROTECTION
+                 LINK + SPAM + 18+ IMAGE PROTECTION
               ============================================= */
 
               const moderationHandled =
@@ -3677,6 +4128,22 @@ async function startBot() {
 
               if (
                 moderationHandled
+              ) {
+                continue;
+              }
+
+              /*
+                 Image হলে এবং 18+ না হলে
+                 এখান থেকে command processing-এ
+                 যাওয়ার প্রয়োজন নেই।
+
+                 Caption থাকলে caption command
+                 processing করা যাবে।
+              */
+
+              if (
+                message.message?.imageMessage &&
+                !text
               ) {
                 continue;
               }
@@ -4567,6 +5034,7 @@ ${
 
                 continue;
               }
+
             } catch (messageError) {
               console.log(
                 "⚠️ Single message error:",
@@ -4578,6 +5046,7 @@ ${
               );
             }
           }
+
         } catch (error) {
           console.log(
             "⚠️ Message handler error:",
@@ -4594,6 +5063,7 @@ ${
     console.log(
       "🚀 WhatsApp Bot Starting..."
     );
+
   } catch (error) {
     console.log(
       "❌ Failed to start bot:",
