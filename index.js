@@ -29,16 +29,9 @@ const AUTH_DIR = "./auth_info";
 const PAIRING_NUMBER_FILE = "./pairing_number.txt";
 const BOT_STATUS_FILE = "./bot_status.json";
 
-/*
-  ==========================================================
-  ALLOWED GROUPS
-  ==========================================================
-
-  এই দুইটি Group ID-তেই Bot কাজ করবে।
-
-  Bot-এর WhatsApp Number Group Admin না হলেও
-  এই Group ID তালিকায় থাকলে Bot কাজ করবে।
-*/
+/* =========================================================
+   ALLOWED GROUPS
+========================================================= */
 
 const ALLOWED_GROUPS = [
   "120363428127558997@g.us",
@@ -58,7 +51,7 @@ const contactPhoneJids = new Map();
 const lidToPhoneJid = new Map();
 
 /* =========================================================
-   COMMANDS
+   COMMAND DEFINITIONS
 ========================================================= */
 
 const COMMAND_DEFINITIONS = {
@@ -79,9 +72,9 @@ const COMMAND_ALIASES = {
   "ডিল": "deal"
 };
 
-/*
-  যেসব কমান্ড শুধু Admin / Owner ব্যবহার করতে পারবে
-*/
+/* =========================================================
+   ADMIN ONLY COMMANDS
+========================================================= */
 
 const ADMIN_ONLY_COMMANDS = new Set([
   "adminpanel",
@@ -90,16 +83,14 @@ const ADMIN_ONLY_COMMANDS = new Set([
   "off",
   "boton",
   "botoff",
-
   "offbot",
   "onbot",
   "fullbotstatus"
 ]);
 
-/*
-  Full Bot Off অবস্থায় এগুলো Admin / Owner-এর জন্য
-  সবসময় চালু থাকবে।
-*/
+/* =========================================================
+   PROTECTED COMMANDS
+========================================================= */
 
 const PROTECTED_COMMANDS = new Set([
   "adminpanel",
@@ -138,9 +129,7 @@ function loadBotStatus() {
     botStatus = {};
   }
 
-  for (
-    const groupId of Object.keys(botStatus)
-  ) {
+  for (const groupId of Object.keys(botStatus)) {
     if (
       typeof botStatus[groupId] ===
       "boolean"
@@ -148,11 +137,8 @@ function loadBotStatus() {
       botStatus[groupId] = {
         enabled:
           botStatus[groupId],
-
         disabledCommands: [],
-
         fullBotOff: false,
-
         adminAllowedCommands: []
       };
     }
@@ -279,14 +265,11 @@ function isCommandEnabled(
   groupId,
   command
 ) {
-  const status =
-    ensureGroupStatus(
-      groupId
-    );
-
-  return !status
-    .disabledCommands
-    .includes(command);
+  return !ensureGroupStatus(
+    groupId
+  ).disabledCommands.includes(
+    command
+  );
 }
 
 function setCommandEnabled(
@@ -320,9 +303,7 @@ function setCommandEnabled(
    FULL BOT OFF
 ========================================================= */
 
-function isFullBotOff(
-  groupId
-) {
+function isFullBotOff(groupId) {
   return ensureGroupStatus(
     groupId
   ).fullBotOff === true;
@@ -402,14 +383,8 @@ function isAdminAllowedCommand(
 }
 
 /* =========================================================
-   GROUP ID CHECK
+   GROUP ACCESS
 ========================================================= */
-
-/*
-  এখন থেকে Group ID whitelist-ই মূল access system।
-
-  Bot Number Admin হওয়া বাধ্যতামূলক নয়।
-*/
 
 function isGroupAllowed(
   groupId
@@ -436,7 +411,7 @@ http
 
       res.end(
         "PIYAS BOT is running.\n" +
-        "Bot works only in the configured Allowed Groups."
+        "Bot works only in configured Allowed Groups."
       );
     }
   )
@@ -448,16 +423,25 @@ http
       );
 
       console.log(
-        "Allowed Groups:"
+        "━━━━━━━━━━━━━━━━━━━━"
+      );
+
+      console.log(
+        "ALLOWED GROUPS:"
       );
 
       for (
-        const groupId of ALLOWED_GROUPS
+        const groupId of
+        ALLOWED_GROUPS
       ) {
         console.log(
           `✅ ${groupId}`
         );
       }
+
+      console.log(
+        "━━━━━━━━━━━━━━━━━━━━"
+      );
     }
   );
 
@@ -879,79 +863,7 @@ function findParticipant(
 }
 
 /* =========================================================
-   BOT ADMIN CHECK
-   NOTE:
-   Group Access-এর জন্য আর ব্যবহার করা হচ্ছে না।
-   ========================================================= */
-
-async function isBotAdminInGroup(
-  groupId
-) {
-  try {
-    if (!sock) {
-      return false;
-    }
-
-    const metadata =
-      await sock.groupMetadata(
-        groupId
-      );
-
-    const botJid =
-      getBotJid();
-
-    const botPhoneJid =
-      getBotPhoneJid();
-
-    let participant =
-      findParticipant(
-        metadata,
-        botJid
-      );
-
-    if (
-      !participant &&
-      botPhoneJid
-    ) {
-      participant =
-        findParticipant(
-          metadata,
-          botPhoneJid
-        );
-    }
-
-    if (
-      !participant &&
-      PHONE_NUMBER
-    ) {
-      participant =
-        (
-          metadata
-            .participants ||
-          []
-        ).find(
-          p =>
-            phoneFromJid(
-              p.id
-            ) ===
-            PHONE_NUMBER
-        );
-    }
-
-    if (!participant) {
-      return false;
-    }
-
-    return isAdminParticipant(
-      participant
-    );
-  } catch (e) {
-    return false;
-  }
-}
-
-/* =========================================================
-   SENDER ADMIN CHECK
+   SENDER ADMIN
 ========================================================= */
 
 async function isSenderAdmin(
@@ -1011,88 +923,93 @@ function createCopyButton(
 }
 
 /* =========================================================
-   SEND COPY MENU
+   SEND COPY BUTTON MESSAGE
 ========================================================= */
 
-async function sendCopyMenu(
+async function sendCopyButtonMessage(
   jid,
-  title,
-  commands
+  command
 ) {
-  const body =
-    commands
-      .map(
-        c => `• ${c}`
-      )
-      .join("\n");
+  try {
+    const button =
+      createCopyButton(
+        command
+      );
 
-  const buttons =
-    commands.map(
-      command =>
-        createCopyButton(
-          command
-        )
-    );
+    const message =
+      generateWAMessageFromContent(
+        jid,
+        {
+          viewOnceMessage: {
+            message: {
+              interactiveMessage:
+                proto.Message
+                  .InteractiveMessage
+                  .create(
+                    {
+                      body:
+                        proto.Message
+                          .InteractiveMessage
+                          .Body
+                          .create(
+                            {
+                              text:
+                                `📋 ${command}`
+                            }
+                          ),
 
-  const message =
-    generateWAMessageFromContent(
-      jid,
-      {
-        viewOnceMessage: {
-          message: {
-            interactiveMessage:
-              proto.Message
-                .InteractiveMessage
-                .create(
-                  {
-                    body:
-                      proto.Message
-                        .InteractiveMessage
-                        .Body
-                        .create(
-                          {
-                            text:
-                              `${title}\n\n${body}`
-                          }
-                        ),
-
-                    nativeFlowMessage:
-                      proto.Message
-                        .InteractiveMessage
-                        .NativeFlowMessage
-                        .create(
-                          {
-                            buttons
-                          }
-                        )
-                  }
-                )
+                      nativeFlowMessage:
+                        proto.Message
+                          .InteractiveMessage
+                          .NativeFlowMessage
+                          .create(
+                            {
+                              buttons: [
+                                button
+                              ]
+                            }
+                          )
+                    }
+                  )
+            }
           }
+        },
+        {
+          userJid:
+            jid
         }
-      },
+      );
+
+    await sock.relayMessage(
+      jid,
+      message.message,
       {
-        userJid:
-          jid
+        messageId:
+          message.key.id
       }
     );
-
-  await sock.relayMessage(
-    jid,
-    message.message,
-    {
-      messageId:
-        message.key.id
-    }
-  );
+  } catch (e) {
+    console.log(
+      "Copy button error:",
+      e.message
+    );
+  }
 }
 
 /* =========================================================
-   SMALL BOT MENU
+   BOT MENU
 ========================================================= */
 
 async function sendBotMenu(
   jid
 ) {
+  /*
+    WhatsApp native copy buttons-এর
+    compatibility ভালো রাখার জন্য
+    প্রতিটি command আলাদা Copy button
+    message হিসেবে পাঠানো হচ্ছে।
+  */
+
   const menuText = `
 ╭━━━━━━━━━━━━━━━━━━╮
        🤖 BOT MENU
@@ -1135,6 +1052,23 @@ async function sendBotMenu(
 ━━━━━━━━━━━━━━━━━━
 `;
 
+  /*
+    আগে Menu text পাঠাবে
+  */
+
+  await sock.sendMessage(
+    jid,
+    {
+      text:
+        menuText
+    }
+  );
+
+  /*
+    তারপর প্রতিটি command-এর
+    পাশে Copy button
+  */
+
   const commands = [
     "/menu",
     "/bot",
@@ -1150,64 +1084,28 @@ async function sendBotMenu(
     "/website"
   ];
 
-  const buttons =
-    commands.map(
-      command =>
-        createCopyButton(
-          command
+  /*
+    একসাথে অনেক native button পাঠালে
+    WhatsApp client-এ সমস্যা হতে পারে।
+    তাই অল্প delay দিয়ে পাঠানো হচ্ছে।
+  */
+
+  for (
+    const command of commands
+  ) {
+    await new Promise(
+      resolve =>
+        setTimeout(
+          resolve,
+          150
         )
     );
 
-  const message =
-    generateWAMessageFromContent(
+    await sendCopyButtonMessage(
       jid,
-      {
-        viewOnceMessage: {
-          message: {
-            interactiveMessage:
-              proto.Message
-                .InteractiveMessage
-                .create(
-                  {
-                    body:
-                      proto.Message
-                        .InteractiveMessage
-                        .Body
-                        .create(
-                          {
-                            text:
-                              menuText
-                          }
-                        ),
-
-                    nativeFlowMessage:
-                      proto.Message
-                        .InteractiveMessage
-                        .NativeFlowMessage
-                        .create(
-                          {
-                            buttons
-                          }
-                        )
-                  }
-                )
-          }
-        }
-      },
-      {
-        userJid:
-          jid
-      }
+      command
     );
-
-  await sock.relayMessage(
-    jid,
-    message.message,
-    {
-      messageId:
-        message.key.id
-    }
-  );
+  }
 }
 
 /* =========================================================
@@ -1272,6 +1170,7 @@ async function sendCommandList(
 ╰━━━━━━━━━━━━━━━━━━╯
 
 👥 GROUP
+
 /menu
 /bot
 /rules
@@ -1281,20 +1180,26 @@ async function sendCommandList(
 /id
 
 ⚙️ UTILITY
+
 /ping
 
 💰 DEAL
+
 /deal
 /ডিল
 
 🤍 PIYAS
+
 /piyas
 
 🌐 WEBSITE
+
 /website
 
 ━━━━━━━━━━━━━━━━━━
+
 👑 ADMIN
+
 /boton
 /botoff
 /on
@@ -1304,6 +1209,7 @@ async function sendCommandList(
 /fullbotstatus
 /adminpanel
 /cmdlist
+
 ━━━━━━━━━━━━━━━━━━
 `;
 
@@ -1379,7 +1285,7 @@ const PIYAS_INFO = `
 `;
 
 /* =========================================================
-   DEAL NOTICE
+   DEAL
 ========================================================= */
 
 const DEAL_NOTICE = `
@@ -1677,8 +1583,8 @@ async function handleFullBotOnCommand(
 Bot আবার সবার জন্য
 চালু হয়েছে। ✅
 
-📌 এই Group ID Allowed List-এ আছে,
-তাই Bot এখানে কাজ করবে।
+📌 Allowed Group ID হওয়ায়
+এই Group-এ Bot কাজ করবে।
 `
     }
   );
@@ -1781,11 +1687,6 @@ async function sendWelcome(
     if (!sock) {
       return;
     }
-
-    /*
-      এখন Welcome-ও শুধু Allowed Group-এ যাবে।
-      Bot Admin হওয়া লাগবে না।
-    */
 
     if (
       !isGroupAllowed(
@@ -1905,7 +1806,7 @@ async function startBot() {
     );
 
     /* =====================================================
-       CONTACT UPDATE
+       CONTACTS
     ===================================================== */
 
     sock.ev.on(
@@ -1937,7 +1838,7 @@ async function startBot() {
     );
 
     /* =====================================================
-       GROUP PARTICIPANT UPDATE
+       GROUP PARTICIPANTS
     ===================================================== */
 
     sock.ev.on(
@@ -1949,10 +1850,6 @@ async function startBot() {
             participants,
             action
           } = update;
-
-          /*
-            শুধু Allowed Group
-          */
 
           if (
             !isGroupAllowed(
@@ -2008,7 +1905,7 @@ async function startBot() {
           );
 
           console.log(
-            "✅ Allowed Groups:"
+            "Allowed Groups:"
           );
 
           for (
@@ -2016,7 +1913,7 @@ async function startBot() {
             of ALLOWED_GROUPS
           ) {
             console.log(
-              `   ${groupId}`
+              `✅ ${groupId}`
             );
           }
 
@@ -2067,7 +1964,7 @@ async function startBot() {
     );
 
     /* =====================================================
-       PAIRING CODE
+       PAIRING
     ===================================================== */
 
     if (
@@ -2154,9 +2051,9 @@ async function startBot() {
                 ""
               );
 
-            /*
-              শুধু Group
-            */
+            /* =============================================
+               ONLY GROUP
+            ============================================= */
 
             if (
               !isGroupJid(
@@ -2166,16 +2063,9 @@ async function startBot() {
               continue;
             }
 
-            /*
-              =================================================
-              MAIN GROUP ACCESS CHECK
-              =================================================
-
-              এই Group ID Allowed List-এ না থাকলে
-              Bot কোনো command-এর উত্তর দেবে না।
-
-              Bot-এর নিজের Number Admin হওয়া লাগবে না।
-            */
+            /* =============================================
+               GROUP ID WHITELIST
+            ============================================= */
 
             if (
               !isGroupAllowed(
@@ -2269,7 +2159,7 @@ async function startBot() {
             }
 
             /* =============================================
-               FULL BOT OFF CHECK
+               FULL BOT OFF
             ============================================= */
 
             let fullBotAdminAccess =
@@ -2343,7 +2233,7 @@ async function startBot() {
             }
 
             /* =============================================
-               NORMAL BOT ON
+               BOT ON
             ============================================= */
 
             if (
@@ -2367,7 +2257,7 @@ async function startBot() {
             }
 
             /* =============================================
-               NORMAL BOT OFF
+               BOT OFF
             ============================================= */
 
             if (
@@ -2391,7 +2281,7 @@ async function startBot() {
             }
 
             /* =============================================
-               COMMAND ENABLE
+               COMMAND ON
             ============================================= */
 
             if (
@@ -2438,7 +2328,7 @@ async function startBot() {
             }
 
             /* =============================================
-               COMMAND DISABLE
+               COMMAND OFF
             ============================================= */
 
             if (
@@ -2498,7 +2388,7 @@ async function startBot() {
             }
 
             /* =============================================
-               COMMAND DISABLED CHECK
+               COMMAND STATUS
             ============================================= */
 
             if (
@@ -2528,18 +2418,15 @@ async function startBot() {
 
             /* =============================================
                BOT
+               /bot = SAME MENU
             ============================================= */
 
             if (
               command ===
               "bot"
             ) {
-              await sock.sendMessage(
-                remoteJid,
-                {
-                  text:
-                    BOT_INFO
-                }
+              await sendBotMenu(
+                remoteJid
               );
 
               continue;
@@ -2621,7 +2508,7 @@ async function startBot() {
                       )
                   }
                 );
-              } catch (e) {
+              } catch {
                 await sock.sendMessage(
                   remoteJid,
                   {
@@ -2748,7 +2635,7 @@ ${owner}
             }
 
             /* =============================================
-               GROUP ID
+               ID
             ============================================= */
 
             if (
