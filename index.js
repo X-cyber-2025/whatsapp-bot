@@ -83,7 +83,9 @@ function loadJSON(
     fallback
 ) {
     try {
+
         if (!fs.existsSync(file)) {
+
             fs.writeFileSync(
                 file,
                 JSON.stringify(
@@ -221,6 +223,7 @@ function jidToPhone(
             "@s.whatsapp.net"
         )
     ) {
+
         return normalizePhone(
             value.split("@")[0]
         );
@@ -358,6 +361,7 @@ function extractUserIdentity(
                 "@s.whatsapp.net"
             )
         ) {
+
             phone =
                 jidToPhone(jid);
         }
@@ -365,6 +369,7 @@ function extractUserIdentity(
         if (
             jid.endsWith("@lid")
         ) {
+
             lid = jid;
         }
     }
@@ -416,6 +421,7 @@ function extractUserIdentity(
     ) {
 
         if (!phone) {
+
             phone =
                 normalizePhone(
                     extra.phone ||
@@ -426,6 +432,7 @@ function extractUserIdentity(
         }
 
         if (!lid) {
+
             lid =
                 cleanJid(
                     extra.lid ||
@@ -435,6 +442,7 @@ function extractUserIdentity(
         }
 
         if (!username) {
+
             username =
                 extra.username ||
                 extra.userName ||
@@ -442,6 +450,7 @@ function extractUserIdentity(
         }
 
         if (!pushName) {
+
             pushName =
                 extra.pushName ||
                 extra.name ||
@@ -455,6 +464,7 @@ function extractUserIdentity(
             "@s.whatsapp.net"
         )
     ) {
+
         phone =
             jidToPhone(jid);
     }
@@ -463,6 +473,7 @@ function extractUserIdentity(
         !lid &&
         jid.endsWith("@lid")
     ) {
+
         lid = jid;
     }
 
@@ -605,6 +616,7 @@ function ensureGroupBlacklist(
             blacklist[groupId]
         )
     ) {
+
         blacklist[groupId] = [];
     }
 
@@ -666,6 +678,7 @@ function identitiesMatch(
                 jidToPhone(x) ===
                 jidToPhone(y)
             ) {
+
                 return true;
             }
         }
@@ -677,6 +690,7 @@ function identitiesMatch(
         a.username.toLowerCase() ===
         b.username.toLowerCase()
     ) {
+
         return true;
     }
 
@@ -964,72 +978,6 @@ async function getGroupMetadata(
         );
 
         return null;
-    }
-}
-
-/* =========================================================
-   DYNAMIC GROUP NAME
-========================================================= */
-
-async function getGroupName(
-    sock,
-    groupId
-) {
-    try {
-
-        /*
-         * Always request fresh metadata.
-         * No group name is hard-coded here.
-         */
-        const metadata =
-            await sock.groupMetadata(
-                groupId
-            );
-
-        if (
-            metadata?.subject &&
-            String(
-                metadata.subject
-            ).trim()
-        ) {
-
-            return String(
-                metadata.subject
-            ).trim();
-        }
-
-        /*
-         * Fallback:
-         * Fetch all participating groups.
-         */
-        const groups =
-            await sock.groupFetchAllParticipating();
-
-        const group =
-            groups?.[groupId];
-
-        if (
-            group?.subject &&
-            String(
-                group.subject
-            ).trim()
-        ) {
-
-            return String(
-                group.subject
-            ).trim();
-        }
-
-        return "আমাদের";
-
-    } catch (err) {
-
-        console.log(
-            "Group name error:",
-            err.message
-        );
-
-        return "আমাদের";
     }
 }
 
@@ -1994,7 +1942,7 @@ function getReportsText(
         🛡️ *REPORTS*
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
-✅ বর্তমানে কোনো Report নেই।
+✅ বর্তমানে কোনো Report নেই。
 `.trim();
     }
 
@@ -2026,7 +1974,7 @@ function getReportsText(
 
 /* =========================================================
    WELCOME
-   DYNAMIC GROUP NAME
+   NO GROUP NAME
 ========================================================= */
 
 async function sendWelcome(
@@ -2045,28 +1993,11 @@ async function sendWelcome(
     try {
 
         /*
-         * Get the CURRENT group name.
-         * Nothing is hard-coded.
+         * No group name is used here.
+         * The Welcome message is identical
+         * for every group.
          */
-        const groupName =
-            await getGroupName(
-                sock,
-                groupId
-            );
 
-        if (!groupName) {
-
-            console.log(
-                `⚠️ Group name unavailable: ${groupId}`
-            );
-
-            return;
-        }
-
-        /*
-         * Participant can be either
-         * an object or a JID.
-         */
         const identity =
             extractUserIdentity(
                 participant
@@ -2087,8 +2018,8 @@ async function sendWelcome(
 
 🎉 *স্বাগতম @${name}!* ❤️
 
-🌸 আপনাকে আমাদের *${groupName}*
-গ্রুপে স্বাগতম।
+🌸 আপনাকে আমাদের গ্রুপে
+স্বাগতম।
 
 💬 এখানে সবাই একে অপরকে
 সহযোগিতা করবেন।
@@ -2101,6 +2032,22 @@ async function sendWelcome(
 
 🌐 Website দেখতে লিখুন:
 */website*
+
+⚡ Account Buy/Sell ও
+Google Play Points সম্পর্কিত
+তথ্য এখানে শেয়ার করা হয়।
+
+⚠️ *বিশেষ সতর্কতা:*
+
+যেকোনো সমস্যায় পড়লে
+সরাসরি Admin-কে জানাবেন।
+
+কোনো ধরনের প্রতারণা বা
+সন্দেহজনক বিষয় দেখলে
+Admin-কে জানান।
+
+🌐 *Our Official Website:*
+${WEBSITE_URL}
 
 ╭━━━━━━━━━━━━━━━━━━━━╮
         ❤️ *PIYAS BOT*
@@ -2119,7 +2066,7 @@ async function sendWelcome(
         );
 
         console.log(
-            `👋 Welcome sent | User: ${name} | Group: ${groupName} | ID: ${groupId}`
+            `👋 Welcome sent | User: ${name} | Group ID: ${groupId}`
         );
 
     } catch (err) {
@@ -2320,10 +2267,8 @@ async function handleParticipantUpdate(
             }
 
             /*
-             * IMPORTANT:
-             * Pass the complete identity object.
-             * This keeps pushName for the
-             * @mention display.
+             * Send Welcome.
+             * No group name is passed or used.
              */
             await sendWelcome(
                 sock,
