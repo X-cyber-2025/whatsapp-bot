@@ -30,7 +30,8 @@ const ALLOWED_GROUPS = (process.env.ALLOWED_GROUPS || "")
     .map(x => x.trim())
     .filter(Boolean);
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_API_KEY =
+    process.env.OPENAI_API_KEY || "";
 
 const IMAGE_MODERATION_ENABLED =
     String(
@@ -42,9 +43,10 @@ const TEXT_MODERATION_ENABLED =
         process.env.TEXT_MODERATION_ENABLED || "true"
     ).toLowerCase() === "true";
 
-const IMAGE_SEXUAL_SCORE_THRESHOLD = Number(
-    process.env.IMAGE_SEXUAL_SCORE_THRESHOLD || 0.30
-);
+const IMAGE_SEXUAL_SCORE_THRESHOLD =
+    Number(
+        process.env.IMAGE_SEXUAL_SCORE_THRESHOLD || 0.30
+    );
 
 /* =========================================================
    PATHS
@@ -65,25 +67,40 @@ const REPORT_FILE =
 const WELCOME_FILE =
     path.join(DATA_DIR, "welcome_status.json");
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(
+    DATA_DIR,
+    {
+        recursive: true
+    }
+);
 
 /* =========================================================
    JSON HELPERS
 ========================================================= */
 
-function loadJSON(file, fallback) {
+function loadJSON(
+    file,
+    fallback
+) {
     try {
         if (!fs.existsSync(file)) {
             fs.writeFileSync(
                 file,
-                JSON.stringify(fallback, null, 2)
+                JSON.stringify(
+                    fallback,
+                    null,
+                    2
+                )
             );
 
             return fallback;
         }
 
         const data =
-            fs.readFileSync(file, "utf8");
+            fs.readFileSync(
+                file,
+                "utf8"
+            );
 
         if (!data.trim()) {
             return fallback;
@@ -92,6 +109,7 @@ function loadJSON(file, fallback) {
         return JSON.parse(data);
 
     } catch (err) {
+
         console.log(
             `JSON LOAD ERROR: ${file}`,
             err.message
@@ -101,13 +119,23 @@ function loadJSON(file, fallback) {
     }
 }
 
-function saveJSON(file, data) {
+function saveJSON(
+    file,
+    data
+) {
     try {
+
         fs.writeFileSync(
             file,
-            JSON.stringify(data, null, 2)
+            JSON.stringify(
+                data,
+                null,
+                2
+            )
         );
+
     } catch (err) {
+
         console.log(
             `JSON SAVE ERROR: ${file}`,
             err.message
@@ -120,41 +148,73 @@ function saveJSON(file, data) {
 ========================================================= */
 
 let blacklist =
-    loadJSON(BLACKLIST_FILE, {});
+    loadJSON(
+        BLACKLIST_FILE,
+        {}
+    );
 
 let botStatus =
-    loadJSON(STATUS_FILE, {});
+    loadJSON(
+        STATUS_FILE,
+        {}
+    );
 
 let reports =
-    loadJSON(REPORT_FILE, {});
+    loadJSON(
+        REPORT_FILE,
+        {}
+    );
 
 let welcomeStatus =
-    loadJSON(WELCOME_FILE, {});
+    loadJSON(
+        WELCOME_FILE,
+        {}
+    );
 
 /* =========================================================
    CACHE
 ========================================================= */
 
-const participantCache = new Map();
-const contactCache = new Map();
-const duplicateCache = new Map();
+const participantCache =
+    new Map();
+
+const contactCache =
+    new Map();
+
+const duplicateCache =
+    new Map();
 
 /* =========================================================
    BASIC HELPERS
 ========================================================= */
 
-function normalizePhone(value) {
-    if (!value) return "";
+function normalizePhone(
+    value
+) {
+    if (!value) {
+        return "";
+    }
 
     return String(value)
-        .replace(/[^0-9]/g, "")
-        .replace(/^0+/, "");
+        .replace(
+            /[^0-9]/g,
+            ""
+        )
+        .replace(
+            /^0+/,
+            ""
+        );
 }
 
-function jidToPhone(jid) {
-    if (!jid) return "";
+function jidToPhone(
+    jid
+) {
+    if (!jid) {
+        return "";
+    }
 
-    const value = String(jid);
+    const value =
+        String(jid);
 
     if (
         value.endsWith(
@@ -169,24 +229,44 @@ function jidToPhone(jid) {
     return "";
 }
 
-function cleanJid(jid) {
-    if (!jid) return "";
+function cleanJid(
+    jid
+) {
+    if (!jid) {
+        return "";
+    }
 
     return String(jid)
-        .replace(/:\d+(?=@)/, "")
+        .replace(
+            /:\d+(?=@)/,
+            ""
+        )
         .trim();
 }
 
-function sameUser(a, b) {
-    if (!a || !b) return false;
+function sameUser(
+    a,
+    b
+) {
+    if (!a || !b) {
+        return false;
+    }
 
-    const aa = cleanJid(a);
-    const bb = cleanJid(b);
+    const aa =
+        cleanJid(a);
 
-    if (aa === bb) return true;
+    const bb =
+        cleanJid(b);
 
-    const ap = jidToPhone(aa);
-    const bp = jidToPhone(bb);
+    if (aa === bb) {
+        return true;
+    }
+
+    const ap =
+        jidToPhone(aa);
+
+    const bp =
+        jidToPhone(bb);
 
     if (
         ap &&
@@ -199,27 +279,39 @@ function sameUser(a, b) {
     return false;
 }
 
-function getBotJid(sock) {
+function getBotJid(
+    sock
+) {
     return sock?.user?.id
-        ? cleanJid(sock.user.id)
+        ? cleanJid(
+            sock.user.id
+        )
         : "";
 }
 
-function getBotPhone(sock) {
+function getBotPhone(
+    sock
+) {
     return jidToPhone(
         getBotJid(sock)
     );
 }
 
-function isGroupJid(jid) {
+function isGroupJid(
+    jid
+) {
     return (
         typeof jid === "string" &&
         jid.endsWith("@g.us")
     );
 }
 
-function isAllowedGroup(groupId) {
-    if (!ALLOWED_GROUPS.length) {
+function isAllowedGroup(
+    groupId
+) {
+    if (
+        !ALLOWED_GROUPS.length
+    ) {
         return true;
     }
 
@@ -228,9 +320,15 @@ function isAllowedGroup(groupId) {
     );
 }
 
-function sleep(ms) {
+function sleep(
+    ms
+) {
     return new Promise(
-        resolve => setTimeout(resolve, ms)
+        resolve =>
+            setTimeout(
+                resolve,
+                ms
+            )
     );
 }
 
@@ -251,14 +349,17 @@ function extractUserIdentity(
     if (
         typeof input === "string"
     ) {
-        jid = cleanJid(input);
+
+        jid =
+            cleanJid(input);
 
         if (
             jid.endsWith(
                 "@s.whatsapp.net"
             )
         ) {
-            phone = jidToPhone(jid);
+            phone =
+                jidToPhone(jid);
         }
 
         if (
@@ -272,27 +373,31 @@ function extractUserIdentity(
         input &&
         typeof input === "object"
     ) {
-        jid = cleanJid(
-            input.id ||
-            input.jid ||
-            input.participant ||
-            input.pn ||
-            ""
-        );
 
-        lid = cleanJid(
-            input.lid ||
-            input.lidJid ||
-            ""
-        );
+        jid =
+            cleanJid(
+                input.id ||
+                input.jid ||
+                input.participant ||
+                input.pn ||
+                ""
+            );
 
-        phone = normalizePhone(
-            input.phone ||
-            input.phoneNumber ||
-            input.authorPn ||
-            input.pn ||
-            ""
-        );
+        lid =
+            cleanJid(
+                input.lid ||
+                input.lidJid ||
+                ""
+            );
+
+        phone =
+            normalizePhone(
+                input.phone ||
+                input.phoneNumber ||
+                input.authorPn ||
+                input.pn ||
+                ""
+            );
 
         username =
             input.username ||
@@ -309,21 +414,24 @@ function extractUserIdentity(
         extra &&
         typeof extra === "object"
     ) {
+
         if (!phone) {
-            phone = normalizePhone(
-                extra.phone ||
-                extra.authorPn ||
-                extra.pn ||
-                ""
-            );
+            phone =
+                normalizePhone(
+                    extra.phone ||
+                    extra.authorPn ||
+                    extra.pn ||
+                    ""
+                );
         }
 
         if (!lid) {
-            lid = cleanJid(
-                extra.lid ||
-                extra.lidJid ||
-                ""
-            );
+            lid =
+                cleanJid(
+                    extra.lid ||
+                    extra.lidJid ||
+                    ""
+                );
         }
 
         if (!username) {
@@ -347,7 +455,8 @@ function extractUserIdentity(
             "@s.whatsapp.net"
         )
     ) {
-        phone = jidToPhone(jid);
+        phone =
+            jidToPhone(jid);
     }
 
     if (
@@ -428,7 +537,10 @@ function cacheIdentity(
             : ""
     ].filter(Boolean);
 
-    for (const key of keys) {
+    for (
+        const key of keys
+    ) {
+
         contactCache.set(
             `${groupId}:${key}`,
             identity
@@ -460,7 +572,10 @@ function getCachedIdentity(
             : ""
     ].filter(Boolean);
 
-    for (const key of keys) {
+    for (
+        const key of keys
+    ) {
+
         const found =
             contactCache.get(
                 `${groupId}:${key}`
@@ -516,8 +631,13 @@ function identitiesMatch(
         normalizePhone(b.phone)
     ].filter(Boolean);
 
-    for (const x of stableA) {
-        for (const y of stableB) {
+    for (
+        const x of stableA
+    ) {
+
+        for (
+            const y of stableB
+        ) {
 
             if (!x || !y) {
                 continue;
@@ -551,13 +671,6 @@ function identitiesMatch(
         }
     }
 
-    /*
-     * Username is only used if both
-     * records have a username.
-     *
-     * Push name is never used for
-     * blacklist matching.
-     */
     if (
         a.username &&
         b.username &&
@@ -627,6 +740,7 @@ function addToBlacklist(
         );
 
     if (existing) {
+
         const merged =
             mergeIdentity(
                 existing,
@@ -733,7 +847,9 @@ function getBlacklist(
 function isBotEnabled(
     groupId
 ) {
-    return botStatus[groupId] !== false;
+    return (
+        botStatus[groupId] !== false
+    );
 }
 
 function setBotStatus(
@@ -780,6 +896,7 @@ async function loadGroupParticipants(
     groupId
 ) {
     try {
+
         const metadata =
             await sock.groupMetadata(
                 groupId
@@ -795,6 +912,7 @@ async function loadGroupParticipants(
             const participant of
             metadata.participants
         ) {
+
             const identity =
                 extractUserIdentity(
                     participant
@@ -816,6 +934,7 @@ async function loadGroupParticipants(
         );
 
     } catch (err) {
+
         console.log(
             "Participant cache error:",
             err.message
@@ -832,11 +951,13 @@ async function getGroupMetadata(
     groupId
 ) {
     try {
+
         return await sock.groupMetadata(
             groupId
         );
 
     } catch (err) {
+
         console.log(
             "Group metadata error:",
             err.message
@@ -847,7 +968,7 @@ async function getGroupMetadata(
 }
 
 /* =========================================================
-   GROUP NAME
+   DYNAMIC GROUP NAME
 ========================================================= */
 
 async function getGroupName(
@@ -855,29 +976,54 @@ async function getGroupName(
     groupId
 ) {
     try {
+
+        /*
+         * Always request fresh metadata.
+         * No group name is hard-coded here.
+         */
         const metadata =
             await sock.groupMetadata(
                 groupId
             );
 
         if (
-            metadata?.subject
+            metadata?.subject &&
+            String(
+                metadata.subject
+            ).trim()
         ) {
-            return metadata.subject;
+
+            return String(
+                metadata.subject
+            ).trim();
         }
 
+        /*
+         * Fallback:
+         * Fetch all participating groups.
+         */
         const groups =
             await sock.groupFetchAllParticipating();
 
+        const group =
+            groups?.[groupId];
+
         if (
-            groups?.[groupId]?.subject
+            group?.subject &&
+            String(
+                group.subject
+            ).trim()
         ) {
-            return groups[groupId].subject;
+
+            return String(
+                group.subject
+            ).trim();
         }
 
         return "আমাদের";
 
     } catch (err) {
+
         console.log(
             "Group name error:",
             err.message
@@ -952,7 +1098,9 @@ async function isBotAdmin(
     );
 }
 
-function isOwner(jid) {
+function isOwner(
+    jid
+) {
     if (
         !PHONE_NUMBER ||
         !jid
@@ -981,7 +1129,9 @@ async function isAdminOrOwner(
     groupId,
     jid
 ) {
-    if (isOwner(jid)) {
+    if (
+        isOwner(jid)
+    ) {
         return true;
     }
 
@@ -1156,11 +1306,13 @@ async function moderateTextWithOpenAI(
     }
 
     try {
+
         const response =
             await fetch(
                 "https://api.openai.com/v1/moderations",
                 {
-                    method: "POST",
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
@@ -1182,6 +1334,7 @@ async function moderateTextWithOpenAI(
             );
 
         if (!response.ok) {
+
             console.log(
                 "OpenAI moderation error:",
                 response.status,
@@ -1199,6 +1352,7 @@ async function moderateTextWithOpenAI(
         );
 
     } catch (err) {
+
         console.log(
             "OpenAI text moderation error:",
             err.message
@@ -1225,6 +1379,7 @@ async function moderateImageWithOpenAI(
     }
 
     try {
+
         const buffer =
             await downloadMediaMessage(
                 message,
@@ -1249,7 +1404,9 @@ async function moderateImageWithOpenAI(
         const base64 =
             Buffer.from(
                 buffer
-            ).toString("base64");
+            ).toString(
+                "base64"
+            );
 
         const mime =
             message.message
@@ -1264,7 +1421,8 @@ async function moderateImageWithOpenAI(
             await fetch(
                 "https://api.openai.com/v1/moderations",
                 {
-                    method: "POST",
+                    method:
+                        "POST",
 
                     headers: {
                         "Content-Type":
@@ -1295,6 +1453,7 @@ async function moderateImageWithOpenAI(
             );
 
         if (!response.ok) {
+
             console.log(
                 "OpenAI image moderation error:",
                 response.status,
@@ -1330,7 +1489,9 @@ async function moderateImageWithOpenAI(
 
         const sexualScore =
             Number(
-                scores["sexual"] || 0
+                scores[
+                    "sexual"
+                ] || 0
             );
 
         return (
@@ -1339,6 +1500,7 @@ async function moderateImageWithOpenAI(
         );
 
     } catch (err) {
+
         console.log(
             "OpenAI image moderation error:",
             err.message
@@ -1357,6 +1519,7 @@ async function deleteMessage(
     message
 ) {
     try {
+
         await sock.sendMessage(
             message.key.remoteJid,
             {
@@ -1379,6 +1542,7 @@ async function deleteMessage(
         return true;
 
     } catch (err) {
+
         console.log(
             "Delete message error:",
             err.message
@@ -1399,6 +1563,7 @@ async function reply(
     quoted
 ) {
     try {
+
         return await sock.sendMessage(
             jid,
             {
@@ -1410,6 +1575,7 @@ async function reply(
         );
 
     } catch (err) {
+
         console.log(
             "Reply error:",
             err.message
@@ -1715,7 +1881,11 @@ async function adminText(
 `;
 
     admins.forEach(
-        (admin, index) => {
+        (
+            admin,
+            index
+        ) => {
+
             text +=
                 `${index + 1}️⃣ @${jidToPhone(admin.id) || admin.id}\n`;
         }
@@ -1760,9 +1930,15 @@ Total Members: *${participants.length}*
 `;
 
     participants
-        .slice(0, 100)
+        .slice(
+            0,
+            100
+        )
         .forEach(
-            (member, index) => {
+            (
+                member,
+                index
+            ) => {
 
                 const phone =
                     jidToPhone(
@@ -1832,7 +2008,10 @@ function getReportsText(
     list
         .slice(-20)
         .forEach(
-            (report, index) => {
+            (
+                report,
+                index
+            ) => {
 
                 text +=
                     `${index + 1}️⃣ Target: ${report.target}\n` +
@@ -1847,6 +2026,7 @@ function getReportsText(
 
 /* =========================================================
    WELCOME
+   DYNAMIC GROUP NAME
 ========================================================= */
 
 async function sendWelcome(
@@ -1863,9 +2043,10 @@ async function sendWelcome(
     }
 
     try {
+
         /*
-         * Get the current group name.
-         * This works for every allowed group.
+         * Get the CURRENT group name.
+         * Nothing is hard-coded.
          */
         const groupName =
             await getGroupName(
@@ -1873,6 +2054,19 @@ async function sendWelcome(
                 groupId
             );
 
+        if (!groupName) {
+
+            console.log(
+                `⚠️ Group name unavailable: ${groupId}`
+            );
+
+            return;
+        }
+
+        /*
+         * Participant can be either
+         * an object or a JID.
+         */
         const identity =
             extractUserIdentity(
                 participant
@@ -1896,11 +2090,17 @@ async function sendWelcome(
 🌸 আপনাকে আমাদের *${groupName}*
 গ্রুপে স্বাগতম।
 
-📜 গ্রুপের নিয়ম জানতে লিখুন:
+💬 এখানে সবাই একে অপরকে
+সহযোগিতা করবেন।
+
+📌 গ্রুপের নিয়ম দেখতে লিখুন:
 */rules*
 
 🤖 Bot Menu দেখতে লিখুন:
 */menu*
+
+🌐 Website দেখতে লিখুন:
+*/website*
 
 ╭━━━━━━━━━━━━━━━━━━━━╮
         ❤️ *PIYAS BOT*
@@ -1911,13 +2111,19 @@ async function sendWelcome(
             groupId,
             {
                 text,
+
                 mentions: [
                     mention
                 ]
             }
         );
 
+        console.log(
+            `👋 Welcome sent | User: ${name} | Group: ${groupName} | ID: ${groupId}`
+        );
+
     } catch (err) {
+
         console.log(
             "Welcome error:",
             err.message
@@ -1961,7 +2167,10 @@ async function handleBlacklistedJoin(
     }
 
     console.log(
-        `🚫 BLACKLISTED MEMBER REJOINED: ${finalIdentity.jid || participant}`
+        `🚫 BLACKLISTED MEMBER REJOINED: ${
+            finalIdentity.jid ||
+            participant
+        }`
     );
 
     if (
@@ -1970,6 +2179,7 @@ async function handleBlacklistedJoin(
             groupId
         ))
     ) {
+
         console.log(
             "❌ Bot is not admin. Cannot remove blacklisted member."
         );
@@ -1978,6 +2188,7 @@ async function handleBlacklistedJoin(
     }
 
     try {
+
         await sleep(500);
 
         const target =
@@ -1986,7 +2197,9 @@ async function handleBlacklistedJoin(
 
         await sock.groupParticipantsUpdate(
             groupId,
-            [target],
+            [
+                target
+            ],
             "remove"
         );
 
@@ -1997,6 +2210,7 @@ async function handleBlacklistedJoin(
         return true;
 
     } catch (err) {
+
         console.log(
             `❌ Failed to remove blacklisted member: ${err.message}`
         );
@@ -2021,11 +2235,15 @@ async function handleParticipantUpdate(
         authorPn
     } = update;
 
-    if (!isGroupJid(groupId)) {
+    if (
+        !isGroupJid(groupId)
+    ) {
         return;
     }
 
-    if (!isAllowedGroup(groupId)) {
+    if (
+        !isAllowedGroup(groupId)
+    ) {
         return;
     }
 
@@ -2041,13 +2259,15 @@ async function handleParticipantUpdate(
         `📱 AUTHOR PN: ${authorPn || "NONE"}`
     );
 
-    /*
-     * Cache participant identities.
-     */
+    /* =====================================================
+       CACHE PARTICIPANTS
+    ===================================================== */
+
     for (
         const participant of
         participants
     ) {
+
         const identity =
             extractUserIdentity(
                 participant
@@ -2063,7 +2283,9 @@ async function handleParticipantUpdate(
        ADD
     ===================================================== */
 
-    if (action === "add") {
+    if (
+        action === "add"
+    ) {
 
         for (
             const participant of
@@ -2091,21 +2313,22 @@ async function handleParticipantUpdate(
                 await handleBlacklistedJoin(
                     sock,
                     groupId,
-                    finalIdentity.jid ||
-                    participant
+                    finalIdentity
                 )
             ) {
                 continue;
             }
 
             /*
-             * Normal welcome.
+             * IMPORTANT:
+             * Pass the complete identity object.
+             * This keeps pushName for the
+             * @mention display.
              */
             await sendWelcome(
                 sock,
                 groupId,
-                finalIdentity.jid ||
-                participant
+                finalIdentity
             );
         }
 
@@ -2116,7 +2339,9 @@ async function handleParticipantUpdate(
        REMOVE
     ===================================================== */
 
-    if (action === "remove") {
+    if (
+        action === "remove"
+    ) {
 
         const botJid =
             getBotJid(sock);
@@ -2152,9 +2377,6 @@ async function handleParticipantUpdate(
                 participantIdentity
             );
 
-            /*
-             * Build author identity.
-             */
             const authorIdentity =
                 extractUserIdentity(
                     author,
@@ -2164,16 +2386,11 @@ async function handleParticipantUpdate(
                     }
                 );
 
-            /*
-             * Check if the event author
-             * is the same person who left.
-             */
             let authorIsParticipant =
                 false;
 
-            /*
-             * JID comparison
-             */
+            /* JID comparison */
+
             if (
                 authorIdentity.jid &&
                 participantJid &&
@@ -2182,13 +2399,13 @@ async function handleParticipantUpdate(
                     participantJid
                 )
             ) {
+
                 authorIsParticipant =
                     true;
             }
 
-            /*
-             * LID comparison
-             */
+            /* LID comparison */
+
             if (
                 !authorIsParticipant &&
                 authorIdentity.lid &&
@@ -2200,13 +2417,13 @@ async function handleParticipantUpdate(
                     participantLid
                 )
             ) {
+
                 authorIsParticipant =
                     true;
             }
 
-            /*
-             * Phone comparison
-             */
+            /* Phone comparison */
+
             if (
                 !authorIsParticipant &&
                 authorIdentity.phone &&
@@ -2218,13 +2435,13 @@ async function handleParticipantUpdate(
                     participantPhone
                 )
             ) {
+
                 authorIsParticipant =
                     true;
             }
 
-            /*
-             * authorPn comparison
-             */
+            /* authorPn comparison */
+
             if (
                 !authorIsParticipant &&
                 authorPn &&
@@ -2236,14 +2453,15 @@ async function handleParticipantUpdate(
                     participantPhone
                 )
             ) {
+
                 authorIsParticipant =
                     true;
             }
 
-            /*
-             * Check whether Bot itself
-             * performed the removal.
-             */
+            /* =================================================
+               BOT REMOVAL CHECK
+            ================================================= */
+
             let authorIsBot =
                 false;
 
@@ -2255,6 +2473,7 @@ async function handleParticipantUpdate(
                     botJid
                 )
             ) {
+
                 authorIsBot =
                     true;
             }
@@ -2270,6 +2489,7 @@ async function handleParticipantUpdate(
                     botPhone
                 )
             ) {
+
                 authorIsBot =
                     true;
             }
@@ -2285,6 +2505,7 @@ async function handleParticipantUpdate(
                     botPhone
                 )
             ) {
+
                 authorIsBot =
                     true;
             }
@@ -2298,7 +2519,10 @@ async function handleParticipantUpdate(
                NO BLACKLIST
             ================================================= */
 
-            if (authorIsBot) {
+            if (
+                authorIsBot
+            ) {
+
                 console.log(
                     `🤖 BOT REMOVED: ${participantJid} | NO BLACKLIST`
                 );
@@ -2315,6 +2539,7 @@ async function handleParticipantUpdate(
                 author &&
                 !authorIsParticipant
             ) {
+
                 console.log(
                     `👑 ADMIN/OTHER USER REMOVED: ${participantJid} | AUTHOR=${author} | NO BLACKLIST`
                 );
@@ -2338,10 +2563,13 @@ async function handleParticipantUpdate(
                     );
 
                 if (added) {
+
                     console.log(
                         `🚫 BLACKLIST ADDED (SELF LEAVE): ${participantJid}`
                     );
+
                 } else {
+
                     console.log(
                         `🚫 ALREADY BLACKLISTED (SELF LEAVE): ${participantJid}`
                     );
@@ -2350,14 +2578,12 @@ async function handleParticipantUpdate(
                 continue;
             }
 
-            /*
-             * No author:
-             *
-             * Do not blindly blacklist.
-             * This avoids accidentally blacklisting
-             * someone who was removed by an admin.
-             */
+            /* =================================================
+               NO AUTHOR
+            ================================================= */
+
             if (!author) {
+
                 console.log(
                     `⚠️ REMOVE EVENT WITHOUT AUTHOR: ${participantJid} | NO BLACKLIST`
                 );
@@ -2380,6 +2606,7 @@ function parseCommand(
     text
 ) {
     if (!text) {
+
         return {
             command: "",
             args: ""
@@ -2392,6 +2619,7 @@ function parseCommand(
     if (
         !trimmed.startsWith("/")
     ) {
+
         return {
             command: "",
             args: ""
@@ -2399,7 +2627,9 @@ function parseCommand(
     }
 
     const parts =
-        trimmed.split(/\s+/);
+        trimmed.split(
+            /\s+/
+        );
 
     const command =
         parts
@@ -2429,7 +2659,8 @@ async function handleCommand(
     const {
         command,
         args
-    } = parseCommand(text);
+    } =
+        parseCommand(text);
 
     if (!command) {
         return;
@@ -2450,6 +2681,7 @@ async function handleCommand(
         command === "/menu" ||
         command === "/bot"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2463,6 +2695,7 @@ async function handleCommand(
     if (
         command === "/rules"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2476,6 +2709,7 @@ async function handleCommand(
     if (
         command === "/admin"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2492,6 +2726,7 @@ async function handleCommand(
     if (
         command === "/members"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2508,6 +2743,7 @@ async function handleCommand(
     if (
         command === "/groupinfo"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2524,6 +2760,7 @@ async function handleCommand(
     if (
         command === "/id"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2537,6 +2774,7 @@ async function handleCommand(
     if (
         command === "/ping"
     ) {
+
         const start =
             Date.now();
 
@@ -2558,6 +2796,7 @@ async function handleCommand(
             start;
 
         if (sent) {
+
             await sock.sendMessage(
                 groupId,
                 {
@@ -2578,6 +2817,7 @@ async function handleCommand(
         command === "/deal" ||
         command === "/ডিল"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2606,6 +2846,7 @@ async function handleCommand(
     if (
         command === "/piyas"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2619,6 +2860,7 @@ async function handleCommand(
     if (
         command === "/website"
     ) {
+
         await reply(
             sock,
             groupId,
@@ -2636,6 +2878,7 @@ async function handleCommand(
     if (
         command === "/report"
     ) {
+
         const mentioned =
             getMentionedJids(
                 message.message
@@ -2644,6 +2887,7 @@ async function handleCommand(
         if (
             !mentioned.length
         ) {
+
             await reply(
                 sock,
                 groupId,
@@ -2655,6 +2899,7 @@ async function handleCommand(
         }
 
         if (!args) {
+
             await reply(
                 sock,
                 groupId,
@@ -2690,6 +2935,7 @@ async function handleCommand(
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2721,6 +2967,7 @@ async function handleCommand(
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2746,6 +2993,7 @@ async function handleCommand(
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2777,6 +3025,7 @@ async function handleCommand(
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2809,6 +3058,7 @@ async function handleCommand(
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2839,6 +3089,7 @@ async function handleCommand(
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2906,6 +3157,7 @@ ${IMAGE_MODERATION_ENABLED ? "🟢 ON" : "🔴 OFF"}
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2936,6 +3188,7 @@ ${IMAGE_MODERATION_ENABLED ? "🟢 ON" : "🔴 OFF"}
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2971,6 +3224,7 @@ ${IMAGE_MODERATION_ENABLED ? "🟢 ON" : "🔴 OFF"}
     ) {
 
         if (!admin) {
+
             await reply(
                 sock,
                 groupId,
@@ -2989,6 +3243,7 @@ ${IMAGE_MODERATION_ENABLED ? "🟢 ON" : "🔴 OFF"}
         if (
             !mentioned.length
         ) {
+
             await reply(
                 sock,
                 groupId,
@@ -3116,6 +3371,7 @@ async function handleIncomingMessage(
         if (
             senderIsAdmin
         ) {
+
             console.log(
                 "👑 Admin/Owner message - moderation skipped."
             );
@@ -3129,6 +3385,7 @@ async function handleIncomingMessage(
             text.startsWith("/") &&
             isBotEnabled(groupId)
         ) {
+
             await handleCommand(
                 sock,
                 message,
@@ -3151,9 +3408,10 @@ async function handleIncomingMessage(
 
             const {
                 command
-            } = parseCommand(
-                text
-            );
+            } =
+                parseCommand(
+                    text
+                );
 
             const adminCommands = [
                 "/on",
@@ -3177,6 +3435,7 @@ async function handleIncomingMessage(
                     command
                 )
             ) {
+
                 await handleCommand(
                     sock,
                     message,
@@ -3189,10 +3448,10 @@ async function handleIncomingMessage(
             return;
         }
 
-        /*
-         * If Bot is OFF, skip normal
-         * moderation.
-         */
+        /* =================================================
+           BOT OFF
+        ================================================= */
+
         if (
             !isBotEnabled(
                 groupId
@@ -3201,9 +3460,10 @@ async function handleIncomingMessage(
             return;
         }
 
-        /*
-         * Admin/Owner bypass.
-         */
+        /* =================================================
+           ADMIN BYPASS
+        ================================================= */
+
         if (
             senderIsAdmin
         ) {
@@ -3226,6 +3486,7 @@ async function handleIncomingMessage(
                 );
 
             if (deleted) {
+
                 console.log(
                     "🗑️ Bad word message deleted."
                 );
@@ -3249,6 +3510,7 @@ async function handleIncomingMessage(
                 );
 
             if (deleted) {
+
                 console.log(
                     "🔗 Non-admin link removed."
                 );
@@ -3276,6 +3538,7 @@ async function handleIncomingMessage(
                 );
 
             if (deleted) {
+
                 console.log(
                     "🚫 Duplicate spam message deleted."
                 );
@@ -3308,6 +3571,7 @@ async function handleIncomingMessage(
                     );
 
                 if (deleted) {
+
                     console.log(
                         "🤖 OpenAI flagged text - message deleted."
                     );
@@ -3350,6 +3614,7 @@ async function handleIncomingMessage(
                     );
 
                 if (deleted) {
+
                     console.log(
                         "🔞 Sexual/18+ image removed."
                     );
@@ -3374,7 +3639,10 @@ async function handleIncomingMessage(
 
 const server =
     http.createServer(
-        (req, res) => {
+        (
+            req,
+            res
+        ) => {
 
             res.writeHead(
                 200,
@@ -3393,6 +3661,7 @@ const server =
 server.listen(
     PORT,
     () => {
+
         console.log(
             `🌐 HTTP Server running on port ${PORT}`
         );
