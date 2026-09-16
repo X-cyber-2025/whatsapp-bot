@@ -1974,7 +1974,7 @@ function getReportsText(
 
 /* =========================================================
    WELCOME
-   NO GROUP NAME
+   DYNAMIC GROUP NAME
 ========================================================= */
 
 async function sendWelcome(
@@ -1992,11 +1992,31 @@ async function sendWelcome(
 
     try {
 
-        /*
-         * No group name is used here.
-         * The Welcome message is identical
-         * for every group.
-         */
+        /* Get current group name */
+        let groupName =
+            "আমাদের গ্রুপ";
+
+        try {
+
+            const metadata =
+                await sock.groupMetadata(
+                    groupId
+                );
+
+            if (
+                metadata?.subject
+            ) {
+                groupName =
+                    metadata.subject;
+            }
+
+        } catch (err) {
+
+            console.log(
+                "Group name fetch error:",
+                err.message
+            );
+        }
 
         const identity =
             extractUserIdentity(
@@ -2018,8 +2038,8 @@ async function sendWelcome(
 
 🎉 *স্বাগতম @${name}!* ❤️
 
-🌸 আপনাকে আমাদের গ্রুপে
-স্বাগতম।
+🌸 আপনাকে *${groupName}*
+গ্রুপে স্বাগতম।
 
 💬 এখানে সবাই একে অপরকে
 সহযোগিতা করবেন।
@@ -2066,7 +2086,7 @@ ${WEBSITE_URL}
         );
 
         console.log(
-            `👋 Welcome sent | User: ${name} | Group ID: ${groupId}`
+            `👋 Welcome sent | User: ${name} | Group: ${groupName} | Group ID: ${groupId}`
         );
 
     } catch (err) {
@@ -2266,10 +2286,6 @@ async function handleParticipantUpdate(
                 continue;
             }
 
-            /*
-             * Send Welcome.
-             * No group name is passed or used.
-             */
             await sendWelcome(
                 sock,
                 groupId,
