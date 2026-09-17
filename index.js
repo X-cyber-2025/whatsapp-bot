@@ -18,7 +18,10 @@ dotenv.config();
    CONFIG
 ========================================================= */
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT =
+    Number(
+        process.env.PORT || 3000
+    );
 
 const PHONE_NUMBER =
     process.env.PHONE_NUMBER || "";
@@ -27,8 +30,22 @@ const WEBSITE_URL =
     process.env.WEBSITE_URL ||
     "https://x-cyber-2025.github.io/X-cyber.web/";
 
-const OPENAI_API_KEY =
-    process.env.OPENAI_API_KEY || "";
+const GEMINI_KEYS = [
+    process.env.GEMINI_API_KEY_1 || "",
+    process.env.GEMINI_API_KEY_2 || "",
+    process.env.GEMINI_API_KEY_3 || "",
+    process.env.GEMINI_API_KEY_4 || "",
+    process.env.GEMINI_API_KEY_5 || ""
+].filter(Boolean);
+
+const GEMINI_MODEL =
+    process.env.GEMINI_MODEL ||
+    "gemini-2.5-flash-lite";
+
+const GEMINI_MODERATION_ENABLED =
+    String(
+        process.env.GEMINI_MODERATION_ENABLED ?? "true"
+    ).toLowerCase() === "true";
 
 const IMAGE_MODERATION_ENABLED =
     String(
@@ -39,11 +56,6 @@ const TEXT_MODERATION_ENABLED =
     String(
         process.env.TEXT_MODERATION_ENABLED ?? "true"
     ).toLowerCase() === "true";
-
-const IMAGE_SEXUAL_SCORE_THRESHOLD =
-    Number(
-        process.env.IMAGE_SEXUAL_SCORE_THRESHOLD || 0.30
-    );
 
 /*
     Same message from the same user
@@ -140,6 +152,7 @@ function loadJson(
         }
 
         return JSON.parse(raw);
+
     } catch (error) {
         console.error(
             "JSON LOAD ERROR:",
@@ -168,6 +181,7 @@ function saveJson(
         );
 
         return true;
+
     } catch (error) {
         console.error(
             "JSON SAVE ERROR:",
@@ -213,6 +227,8 @@ const contactCache =
 
 const duplicateCache =
     new Map();
+
+let geminiKeyIndex = 0;
 
 /* =========================================================
    IDENTITY HELPERS
@@ -861,6 +877,7 @@ async function loadGroupParticipants(
         );
 
         return participants;
+
     } catch (error) {
         console.error(
             "PARTICIPANT LOAD ERROR:",
@@ -883,6 +900,7 @@ async function getGroupMetadata(
         return await sock.groupMetadata(
             groupId
         );
+
     } catch (error) {
         console.error(
             "GROUP METADATA ERROR:",
@@ -951,6 +969,7 @@ async function isGroupAdmin(
             participant.admin ===
             "superadmin"
         );
+
     } catch {
         return false;
     }
@@ -1135,7 +1154,7 @@ function containsBadWord(
 }
 
 /* =========================================================
-   STRICT LINK DETECTION
+   LINK DETECTION
 ========================================================= */
 
 function containsLink(
@@ -1153,22 +1172,12 @@ function containsLink(
         return false;
     }
 
-    /*
-        Remove characters that can surround
-        a URL without changing the URL itself.
-    */
     const cleaned =
         value.replace(
             /[<>(){}\[\]"'`]/g,
             " "
         );
 
-    /*
-        Full HTTP / HTTPS URL
-        Example:
-        https://example.com
-        http://example.com/test
-    */
     const fullUrlRegex =
         /\bhttps?:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{1,5})?(?:[/?#][^\s<>"']*)?/i;
 
@@ -1180,11 +1189,6 @@ function containsLink(
         return true;
     }
 
-    /*
-        WWW URL
-        Example:
-        www.google.com
-    */
     const wwwRegex =
         /\bwww\.(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{1,5})?(?:[/?#][^\s<>"']*)?/i;
 
@@ -1196,9 +1200,6 @@ function containsLink(
         return true;
     }
 
-    /*
-        WhatsApp group link
-    */
     const whatsappGroupRegex =
         /\bchat\.whatsapp\.com\/[A-Za-z0-9_-]+/i;
 
@@ -1210,9 +1211,6 @@ function containsLink(
         return true;
     }
 
-    /*
-        WhatsApp direct link
-    */
     const whatsappDirectRegex =
         /\bwa\.me\/[A-Za-z0-9_?=&+./-]+/i;
 
@@ -1224,9 +1222,6 @@ function containsLink(
         return true;
     }
 
-    /*
-        Telegram links
-    */
     const telegramRegex =
         /\b(?:t\.me|telegram\.me)\/[A-Za-z0-9_+./?=&-]+/i;
 
@@ -1238,13 +1233,6 @@ function containsLink(
         return true;
     }
 
-    /*
-        Bare domain
-        Example:
-        google.com
-        youtube.com
-        example.org
-    */
     const bareDomainRegex =
         /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}(?::\d{1,5})?(?:[/?#][^\s<>"']*)?/i;
 
@@ -1361,88 +1349,326 @@ setInterval(
 );
 
 /* =========================================================
-   OPENAI TEXT MODERATION
+   GEMINI KEY ROTATION
+========================================================= */
+
+function getGeminiKeys() {
+    return GEMINI_KEYS.filter(
+        Boolean
+    );
+}
+
+function getNextGeminiKey() {
+    const keys =
+        getGeminiKeys();
+
+    if (!keys.length) {
+        return "";
+    }
+
+    const key =
+        keys[
+            geminiKeyIndex %
+            keys.length
+        ];
+
+    geminiKeyIndex =
+        (
+            geminiKeyIndex + 1
+        ) % keys.length;
+
+    return key;
+}
+
+function rotateGeminiKey() {
+    if (
+        GEMINI_KEYS.length <= 1
+    ) {
+        return;
+    }
+
+    geminiKeyIndex =
+        (
+            geminiKeyIndex + 1
+        ) % GEMINI_KEYS.length;
+}
+
+/* =========================================================
+   GEMINI API
+========================================================= */
+
+async function callGemini(
+    contents
+) {
+    if (
+        !GEMINI_MODERATION_ENABLED ||
+        !GEMINI_KEYS.length
+    ) {
+        return null;
+    }
+
+    const maxAttempts =
+        GEMINI_KEYS.length;
+
+    for (
+        let attempt = 0;
+        attempt < maxAttempts;
+        attempt++
+    ) {
+        const apiKey =
+            getNextGeminiKey();
+
+        if (!apiKey) {
+            return null;
+        }
+
+        try {
+            const url =
+                `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_MODEL)}:generateContent`;
+
+            const response =
+                await fetch(
+                    url,
+                    {
+                        method:
+                            "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json",
+
+                            "x-goog-api-key":
+                                apiKey
+                        },
+
+                        body:
+                            JSON.stringify({
+                                contents,
+
+                                generationConfig: {
+                                    temperature:
+                                        0,
+
+                                    responseMimeType:
+                                        "application/json"
+                                }
+                            })
+                    }
+                );
+
+            if (
+                response.ok
+            ) {
+                return await response.json();
+            }
+
+            const errorText =
+                await response.text();
+
+            console.error(
+                "GEMINI API ERROR:",
+                response.status,
+                errorText.slice(
+                    0,
+                    500
+                )
+            );
+
+            rotateGeminiKey();
+
+            await sleep(300);
+
+        } catch (error) {
+            console.error(
+                "GEMINI REQUEST ERROR:",
+                error.message
+            );
+
+            rotateGeminiKey();
+
+            await sleep(300);
+        }
+    }
+
+    return null;
+}
+
+function getGeminiResponseText(
+    data
+) {
+    try {
+        return String(
+            data
+                ?.candidates?.[0]
+                ?.content?.parts
+                ?.map(
+                    part =>
+                        part.text || ""
+                )
+                .join(" ") ||
+            ""
+        ).trim();
+
+    } catch {
+        return "";
+    }
+}
+
+/* =========================================================
+   GEMINI TEXT MODERATION
 ========================================================= */
 
 async function moderateText(
     text
 ) {
     if (
-        !OPENAI_API_KEY ||
+        !text ||
         !TEXT_MODERATION_ENABLED ||
-        !text
+        !GEMINI_MODERATION_ENABLED ||
+        !GEMINI_KEYS.length
     ) {
         return {
-            flagged: false
+            flagged: false,
+            source: "disabled"
         };
     }
 
     try {
-        const response =
-            await fetch(
-                "https://api.openai.com/v1/moderations",
-                {
-                    method: "POST",
+        const contents = [
+            {
+                role:
+                    "user",
 
-                    headers: {
-                        "Content-Type":
-                            "application/json",
+                parts: [
+                    {
+                        text:
+                            `
+You are a strict WhatsApp group moderation classifier.
 
-                        "Authorization":
-                            `Bearer ${OPENAI_API_KEY}`
-                    },
+Analyze the user's message.
 
-                    body:
-                        JSON.stringify({
-                            model:
-                                "omni-moderation-latest",
+FLAG it if it contains:
+- profanity or abusive language
+- obscene language
+- sexual or explicit content
+- pornographic content
+- sexual solicitation
+- severe harassment
+- hateful or severely abusive content
+- sexual content involving minors
+- clearly inappropriate adult content
 
-                            input:
-                                text
-                        })
-                }
+Do NOT flag:
+- normal conversation
+- greetings
+- harmless slang
+- ordinary criticism
+- harmless jokes without prohibited content
+
+Return ONLY valid JSON:
+
+{"flagged":true,"reason":"profanity"}
+
+or
+
+{"flagged":false,"reason":"safe"}
+
+User message:
+${text}
+`.trim()
+                    }
+                ]
+            }
+        ];
+
+        const data =
+            await callGemini(
+                contents
             );
 
-        if (!response.ok) {
+        if (!data) {
             return {
-                flagged: false
+                flagged: false,
+                source: "api-error"
             };
         }
 
-        const data =
-            await response.json();
+        const resultText =
+            getGeminiResponseText(
+                data
+            );
 
-        const result =
-            data?.results?.[0];
+        if (!resultText) {
+            return {
+                flagged: false,
+                source: "empty"
+            };
+        }
 
-        return {
-            flagged:
-                Boolean(
-                    result?.flagged
-                ),
+        const cleaned =
+            resultText
+                .replace(
+                    /```json/gi,
+                    ""
+                )
+                .replace(
+                    /```/g,
+                    ""
+                )
+                .trim();
 
-            categories:
-                result?.categories ||
-                {},
+        try {
+            const result =
+                JSON.parse(
+                    cleaned
+                );
 
-            scores:
-                result?.category_scores ||
-                {}
-        };
+            return {
+                flagged:
+                    result.flagged ===
+                    true,
+
+                reason:
+                    result.reason ||
+                    "",
+
+                source:
+                    "gemini"
+            };
+
+        } catch {
+            const normalized =
+                cleaned.toLowerCase();
+
+            return {
+                flagged:
+                    normalized.includes(
+                        '"flagged":true'
+                    ),
+
+                reason:
+                    "gemini-classification",
+
+                source:
+                    "gemini"
+            };
+        }
+
     } catch (error) {
         console.error(
-            "TEXT MODERATION ERROR:",
+            "GEMINI TEXT MODERATION ERROR:",
             error.message
         );
 
         return {
-            flagged: false
+            flagged: false,
+            source: "error"
         };
     }
 }
 
 /* =========================================================
-   OPENAI IMAGE MODERATION
+   GEMINI IMAGE MODERATION
 ========================================================= */
 
 async function moderateImage(
@@ -1450,131 +1676,208 @@ async function moderateImage(
     mimeType = "image/jpeg"
 ) {
     if (
-        !OPENAI_API_KEY ||
+        !buffer ||
         !IMAGE_MODERATION_ENABLED ||
-        !buffer
+        !GEMINI_MODERATION_ENABLED ||
+        !GEMINI_KEYS.length
     ) {
         return {
-            flagged: false
+            flagged: false,
+            source: "disabled"
         };
     }
 
     try {
+        const safeMimeType =
+            String(
+                mimeType ||
+                "image/jpeg"
+            )
+                .split(";")[0]
+                .trim()
+                .toLowerCase();
+
+        const allowedMimeTypes = [
+            "image/jpeg",
+            "image/jpg",
+            "image/png",
+            "image/webp",
+            "image/gif"
+        ];
+
+        const finalMimeType =
+            allowedMimeTypes.includes(
+                safeMimeType
+            )
+                ? safeMimeType
+                : "image/jpeg";
+
         const base64 =
             buffer.toString(
                 "base64"
             );
 
-        const safeMimeType =
-            String(
-                mimeType ||
-                "image/jpeg"
-            ).split(";")[0];
+        const contents = [
+            {
+                role:
+                    "user",
 
-        const dataUrl =
-            `data:${safeMimeType};base64,${base64}`;
+                parts: [
+                    {
+                        inlineData: {
+                            mimeType:
+                                finalMimeType,
 
-        const response =
-            await fetch(
-                "https://api.openai.com/v1/moderations",
-                {
-                    method: "POST",
-
-                    headers: {
-                        "Content-Type":
-                            "application/json",
-
-                        "Authorization":
-                            `Bearer ${OPENAI_API_KEY}`
+                            data:
+                                base64
+                        }
                     },
 
-                    body:
-                        JSON.stringify({
-                            model:
-                                "omni-moderation-latest",
+                    {
+                        text:
+                            `
+You are a strict WhatsApp group image moderation classifier.
 
-                            input: [
-                                {
-                                    type:
-                                        "text",
+Analyze this image.
 
-                                    text:
-                                        "Check this image for sexual or explicit adult content and sexual content involving minors."
-                                },
+FLAG the image if it contains:
+- nudity
+- visible sexual body parts
+- genital exposure
+- exposed breasts
+- sexual acts
+- pornography
+- sexually explicit content
+- clearly sexual adult imagery
+- sexual content involving minors
 
-                                {
-                                    type:
-                                        "image_url",
+Do NOT flag:
+- normal fully clothed people
+- normal selfies
+- ordinary fashion photos
+- normal family photos
+- ordinary non-sexual photos
+- normal educational or medical images
 
-                                    image_url: {
-                                        url:
-                                            dataUrl
-                                    }
-                                }
-                            ]
-                        })
-                }
+Return ONLY valid JSON:
+
+{"flagged":true,"reason":"explicit"}
+
+or
+
+{"flagged":false,"reason":"safe"}
+
+Do not describe the image.
+Only classify it.
+`.trim()
+                    }
+                ]
+            }
+        ];
+
+        const data =
+            await callGemini(
+                contents
             );
 
-        if (!response.ok) {
+        if (!data) {
             return {
-                flagged: false
+                flagged: false,
+                source: "api-error"
             };
         }
 
-        const data =
-            await response.json();
+        const candidate =
+            data?.candidates?.[0];
 
-        const result =
-            data?.results?.[0];
-
-        const scores =
-            result?.category_scores ||
-            {};
-
-        const sexualScore =
-            Number(
-                scores.sexual || 0
+        if (
+            !candidate &&
+            data?.promptFeedback
+        ) {
+            console.log(
+                "GEMINI IMAGE SAFETY BLOCK:",
+                data.promptFeedback
             );
 
-        const sexualMinorsScore =
-            Number(
-                scores["sexual/minors"] ||
-                0
+            return {
+                flagged: true,
+                reason:
+                    "safety-block",
+                source:
+                    "gemini"
+            };
+        }
+
+        const resultText =
+            getGeminiResponseText(
+                data
             );
 
-        const explicit =
-            sexualScore >=
-            IMAGE_SEXUAL_SCORE_THRESHOLD;
+        if (!resultText) {
+            return {
+                flagged: false,
+                source: "empty"
+            };
+        }
 
-        const minors =
-            sexualMinorsScore >=
-            IMAGE_SEXUAL_SCORE_THRESHOLD;
+        const cleaned =
+            resultText
+                .replace(
+                    /```json/gi,
+                    ""
+                )
+                .replace(
+                    /```/g,
+                    ""
+                )
+                .trim();
 
-        return {
-            flagged:
-                Boolean(
-                    result?.flagged ||
-                    explicit ||
-                    minors
-                ),
+        try {
+            const result =
+                JSON.parse(
+                    cleaned
+                );
 
-            sexualScore,
+            return {
+                flagged:
+                    result.flagged ===
+                    true,
 
-            sexualMinorsScore,
+                reason:
+                    result.reason ||
+                    "",
 
-            categories:
-                result?.categories ||
-                {}
-        };
+                source:
+                    "gemini"
+            };
+
+        } catch {
+            const normalized =
+                cleaned.toLowerCase();
+
+            return {
+                flagged:
+                    normalized.includes(
+                        '"flagged":true'
+                    ),
+
+                reason:
+                    "gemini-classification",
+
+                source:
+                    "gemini"
+            };
+        }
+
     } catch (error) {
         console.error(
-            "IMAGE MODERATION ERROR:",
+            "GEMINI IMAGE MODERATION ERROR:",
             error.message
         );
 
         return {
-            flagged: false
+            flagged: false,
+            source: "error"
         };
     }
 }
@@ -1598,6 +1901,7 @@ async function deleteMessage(
         );
 
         return true;
+
     } catch (error) {
         console.error(
             "DELETE ERROR:",
@@ -1630,6 +1934,7 @@ async function reply(
                 }
                 : undefined
         );
+
     } catch (error) {
         console.error(
             "REPLY ERROR:",
@@ -2137,6 +2442,7 @@ async function sendWelcome(
                 ]
             }
         );
+
     } catch (error) {
         console.error(
             "WELCOME ERROR:",
@@ -2199,6 +2505,7 @@ async function handleBlacklistedJoin(
 🤖 *PIYAS BOT*
 `.trim()
         );
+
     } catch (error) {
         console.error(
             "BLACKLIST REJOIN ERROR:",
@@ -2267,6 +2574,12 @@ async function handleParticipantUpdate(
                     participant
             });
 
+            const wasBlacklisted =
+                isBlacklisted(
+                    groupId,
+                    participant
+                );
+
             await handleBlacklistedJoin(
                 sock,
                 groupId,
@@ -2274,10 +2587,7 @@ async function handleParticipantUpdate(
             );
 
             if (
-                !isBlacklisted(
-                    groupId,
-                    participant
-                )
+                !wasBlacklisted
             ) {
                 await sendWelcome(
                     sock,
@@ -2313,10 +2623,6 @@ async function handleParticipantUpdate(
             identity
         );
 
-        /*
-            If bot itself was removed,
-            do not blacklist bot.
-        */
         if (
             sameUser(
                 participant,
@@ -2330,10 +2636,6 @@ async function handleParticipantUpdate(
             continue;
         }
 
-        /*
-            If author is missing,
-            it may be a self-leave.
-        */
         const removedBy =
             author ||
             authorPn ||
@@ -2362,11 +2664,6 @@ async function handleParticipantUpdate(
             continue;
         }
 
-        /*
-            User was removed by
-            another person/admin.
-            Do not blacklist.
-        */
         console.log(
             "User removed by another person:",
             {
@@ -2488,9 +2785,6 @@ async function handleCommand(
             groupId
         );
 
-    /*
-        If bot is OFF, only admin controls work.
-    */
     if (
         !isBotEnabled(
             groupId
@@ -2502,9 +2796,9 @@ async function handleCommand(
         return true;
     }
 
-    /* -----------------------------------------------------
-       PUBLIC COMMANDS
-    ----------------------------------------------------- */
+    /* =====================================================
+       PUBLIC
+    ===================================================== */
 
     if (
         command === "menu" ||
@@ -2734,9 +3028,9 @@ ${WEBSITE_URL}
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        REPORT
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command === "report"
@@ -2808,9 +3102,9 @@ Admin বিষয়টি দেখতে পারবেন।
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        ADMIN PANEL
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command === "adminpanel"
@@ -2860,9 +3154,9 @@ Admin বিষয়টি দেখতে পারবেন।
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        BOT ON
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         [
@@ -2899,9 +3193,9 @@ Admin বিষয়টি দেখতে পারবেন।
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        BOT OFF
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         [
@@ -2931,16 +3225,16 @@ Admin বিষয়টি দেখতে পারবেন।
         await reply(
             sock,
             groupId,
-            "⛔ *PIYAS BOT বন্ধ করা হয়েছে।*\n\nAdmin control commands চালু থাকবে।",
+            "⛔ *PIYAS BOT বন্ধ করা হয়েছে।*\n\nAdmin control commands চালু থাকবে.",
             msg
         );
 
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        FULL BOT STATUS
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command ===
@@ -3006,21 +3300,29 @@ ${blacklist.length} User
 ⏱️ Duplicate Window:
 *1 Minute*
 
-🤖 AI Text Moderation:
+📝 Gemini Text Moderation:
 ${
-    OPENAI_API_KEY &&
-    TEXT_MODERATION_ENABLED
+    GEMINI_MODERATION_ENABLED &&
+    TEXT_MODERATION_ENABLED &&
+    GEMINI_KEYS.length
         ? "🟢 Active"
         : "⚪ Disabled"
 }
 
-🖼️ AI Image Moderation:
+🖼️ Gemini Image Moderation:
 ${
-    OPENAI_API_KEY &&
-    IMAGE_MODERATION_ENABLED
+    GEMINI_MODERATION_ENABLED &&
+    IMAGE_MODERATION_ENABLED &&
+    GEMINI_KEYS.length
         ? "🟢 Active"
         : "⚪ Disabled"
 }
+
+🔑 Gemini Keys:
+${GEMINI_KEYS.length}
+
+⚡ Model:
+${GEMINI_MODEL}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 `.trim(),
@@ -3030,9 +3332,9 @@ ${
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        WELCOME ON
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command ===
@@ -3064,9 +3366,9 @@ ${
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        WELCOME OFF
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command ===
@@ -3098,9 +3400,9 @@ ${
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        BLACKLIST CONTROL
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command === "allowback" ||
@@ -3159,9 +3461,9 @@ ${
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        REPORT LIST
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         command === "reports"
@@ -3285,7 +3587,7 @@ Admin প্রয়োজনীয় ব্যবস্থা নিতে পা�
 ╰━━━━━━━━━━━━━━━━━━━━╯
 
 ⚠️ আপনার Message Bot-এর
-Moderation System দ্বারা
+AI Moderation System দ্বারা
 Remove করা হয়েছে।
 
 🤍 *PIYAS BOT*
@@ -3354,14 +3656,32 @@ async function moderateMessage(
         return false;
     }
 
+    /*
+        Bot must be Admin to delete.
+    */
+    const botAdmin =
+        await isBotAdmin(
+            sock,
+            groupId
+        );
+
+    if (!botAdmin) {
+        console.log(
+            "MODERATION: Bot is not Admin."
+        );
+
+        return false;
+    }
+
     const text =
         getMessageText(
             msg.message
         );
 
-    /* -----------------------------------------------------
-       BAD WORD
-    ----------------------------------------------------- */
+    /* =====================================================
+       LOCAL BAD WORD
+       FASTEST CHECK
+    ===================================================== */
 
     if (
         text &&
@@ -3369,19 +3689,14 @@ async function moderateMessage(
             text
         )
     ) {
-        const botAdmin =
-            await isBotAdmin(
-                sock,
-                groupId
-            );
-
-        if (botAdmin) {
+        const deleted =
             await deleteMessage(
                 sock,
                 groupId,
                 msg.key
             );
 
+        if (deleted) {
             await sendModerationWarning(
                 sock,
                 groupId,
@@ -3393,9 +3708,9 @@ async function moderateMessage(
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        LINK
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         text &&
@@ -3403,19 +3718,14 @@ async function moderateMessage(
             text
         )
     ) {
-        const botAdmin =
-            await isBotAdmin(
-                sock,
-                groupId
-            );
-
-        if (botAdmin) {
+        const deleted =
             await deleteMessage(
                 sock,
                 groupId,
                 msg.key
             );
 
+        if (deleted) {
             await sendModerationWarning(
                 sock,
                 groupId,
@@ -3427,9 +3737,9 @@ async function moderateMessage(
         return true;
     }
 
-    /* -----------------------------------------------------
+    /* =====================================================
        DUPLICATE SPAM
-    ----------------------------------------------------- */
+    ===================================================== */
 
     if (
         text &&
@@ -3439,19 +3749,14 @@ async function moderateMessage(
             text
         )
     ) {
-        const botAdmin =
-            await isBotAdmin(
-                sock,
-                groupId
-            );
-
-        if (botAdmin) {
+        const deleted =
             await deleteMessage(
                 sock,
                 groupId,
                 msg.key
             );
 
+        if (deleted) {
             await sock.sendMessage(
                 groupId,
                 {
@@ -3468,36 +3773,46 @@ async function moderateMessage(
         return true;
     }
 
-    /* -----------------------------------------------------
-       AI TEXT MODERATION
-    ----------------------------------------------------- */
+    /* =====================================================
+       GEMINI TEXT MODERATION
+    ===================================================== */
 
     if (
         text &&
-        OPENAI_API_KEY &&
-        TEXT_MODERATION_ENABLED
+        GEMINI_MODERATION_ENABLED &&
+        TEXT_MODERATION_ENABLED &&
+        GEMINI_KEYS.length
     ) {
         const result =
             await moderateText(
                 text
             );
 
+        console.log(
+            "GEMINI TEXT MODERATION:",
+            {
+                flagged:
+                    result.flagged,
+
+                reason:
+                    result.reason,
+
+                source:
+                    result.source
+            }
+        );
+
         if (
             result.flagged
         ) {
-            const botAdmin =
-                await isBotAdmin(
-                    sock,
-                    groupId
-                );
-
-            if (botAdmin) {
+            const deleted =
                 await deleteMessage(
                     sock,
                     groupId,
                     msg.key
                 );
 
+            if (deleted) {
                 await sendModerationWarning(
                     sock,
                     groupId,
@@ -3510,9 +3825,9 @@ async function moderateMessage(
         }
     }
 
-    /* -----------------------------------------------------
-       IMAGE MODERATION
-    ----------------------------------------------------- */
+    /* =====================================================
+       GEMINI IMAGE MODERATION
+    ===================================================== */
 
     const imageMessage =
         msg.message
@@ -3520,10 +3835,15 @@ async function moderateMessage(
 
     if (
         imageMessage &&
-        OPENAI_API_KEY &&
-        IMAGE_MODERATION_ENABLED
+        GEMINI_MODERATION_ENABLED &&
+        IMAGE_MODERATION_ENABLED &&
+        GEMINI_KEYS.length
     ) {
         try {
+            console.log(
+                "IMAGE MODERATION: Checking image..."
+            );
+
             const buffer =
                 await downloadMediaMessage(
                     msg,
@@ -3534,48 +3854,71 @@ async function moderateMessage(
                             P({
                                 level:
                                     "silent"
-                            })
+                            }),
+
+                        reuploadRequest:
+                            sock.updateMediaMessage
                     }
                 );
 
-            if (buffer) {
-                const result =
-                    await moderateImage(
-                        buffer,
-                        imageMessage.mimetype ||
-                        "image/jpeg"
+            if (!buffer) {
+                console.error(
+                    "IMAGE MODERATION: Image download failed."
+                );
+
+                return false;
+            }
+
+            console.log(
+                "IMAGE MODERATION: Image downloaded."
+            );
+
+            const result =
+                await moderateImage(
+                    buffer,
+                    imageMessage.mimetype ||
+                    "image/jpeg"
+                );
+
+            console.log(
+                "GEMINI IMAGE MODERATION:",
+                {
+                    flagged:
+                        result.flagged,
+
+                    reason:
+                        result.reason,
+
+                    source:
+                        result.source
+                }
+            );
+
+            if (
+                result.flagged
+            ) {
+                const deleted =
+                    await deleteMessage(
+                        sock,
+                        groupId,
+                        msg.key
                     );
 
-                if (
-                    result.flagged
-                ) {
-                    const botAdmin =
-                        await isBotAdmin(
-                            sock,
-                            groupId
-                        );
-
-                    if (botAdmin) {
-                        await deleteMessage(
-                            sock,
-                            groupId,
-                            msg.key
-                        );
-
-                        await sendModerationWarning(
-                            sock,
-                            groupId,
-                            sender,
-                            "image"
-                        );
-                    }
-
-                    return true;
+                if (deleted) {
+                    await sendModerationWarning(
+                        sock,
+                        groupId,
+                        sender,
+                        "image"
+                    );
                 }
+
+                return true;
             }
+
         } catch (error) {
             console.error(
-                "IMAGE PROCESS ERROR:",
+                "IMAGE MODERATION PROCESS ERROR:",
                 error.message
             );
         }
@@ -3597,6 +3940,9 @@ async function handleMessage(
             return;
         }
 
+        /*
+            Ignore Bot's own messages.
+        */
         if (
             msg.key?.fromMe
         ) {
@@ -3664,10 +4010,6 @@ async function handleMessage(
         const command =
             parsed.command;
 
-        /*
-            If bot is OFF,
-            only admin controls work.
-        */
         if (
             !isBotEnabled(
                 groupId
@@ -3707,6 +4049,7 @@ async function handleMessage(
             groupId,
             sender
         );
+
     } catch (error) {
         console.error(
             "MESSAGE HANDLER ERROR:",
@@ -3740,6 +4083,7 @@ async function handleGroupUpdate(
             "GROUP UPDATED:",
             groupId
         );
+
     } catch (error) {
         console.error(
             "GROUP UPDATE ERROR:",
@@ -3876,6 +4220,26 @@ async function startBot() {
                     );
 
                     console.log(
+                        "Gemini Keys:",
+                        GEMINI_KEYS.length
+                    );
+
+                    console.log(
+                        "Gemini Model:",
+                        GEMINI_MODEL
+                    );
+
+                    console.log(
+                        "Text Moderation:",
+                        TEXT_MODERATION_ENABLED
+                    );
+
+                    console.log(
+                        "Image Moderation:",
+                        IMAGE_MODERATION_ENABLED
+                    );
+
+                    console.log(
                         "================================"
                     );
 
@@ -3898,6 +4262,7 @@ async function startBot() {
                         console.log(
                             "Group participant cache loaded."
                         );
+
                     } catch (error) {
                         console.error(
                             "GROUP CACHE ERROR:",
@@ -3963,9 +4328,9 @@ async function startBot() {
             }
         );
 
-        /* -------------------------------------------------
+        /* =================================================
            GROUP PARTICIPANT UPDATE
-        ------------------------------------------------- */
+        ================================================= */
 
         sock.ev.on(
             "group-participants.update",
@@ -3977,9 +4342,9 @@ async function startBot() {
             }
         );
 
-        /* -------------------------------------------------
+        /* =================================================
            GROUP UPDATE
-        ------------------------------------------------- */
+        ================================================= */
 
         sock.ev.on(
             "groups.update",
@@ -3996,9 +4361,9 @@ async function startBot() {
             }
         );
 
-        /* -------------------------------------------------
+        /* =================================================
            MESSAGES
-        ------------------------------------------------- */
+        ================================================= */
 
         sock.ev.on(
             "messages.upsert",
@@ -4025,6 +4390,7 @@ async function startBot() {
         );
 
         return sock;
+
     } catch (error) {
         console.error(
             "START BOT ERROR:",
