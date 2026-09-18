@@ -3984,3 +3984,4 @@ process.on(
 loadBotStatus();
 
 startBot();
+
