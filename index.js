@@ -81,7 +81,7 @@ const MODERATION_DEFAULTS = {
 };
 
 /* =========================================================
-   BAD WORDS
+   BAD WORDS (শুধু বাংলা)
 ========================================================= */
 
 const BAD_WORDS = [
@@ -90,91 +90,19 @@ const BAD_WORDS = [
   "বেসসা","বেশ্যা","বেশা","চোদা","চোদন","চুদ","চুদা",
   "চুদাচুদি","হারামি","হারামী","হারামজাদা","হারামজাদী",
   "কুত্তা","কুত্তার","শুয়োর","শুয়োরের","বাঞ্চোদ","বাল",
-  "বালের","ফাক","ফাকিং","গাধা","গাধার","পাগল","পাগলি",
-  "বদমাশ","বদমাশি","জারজ","জারজের","নষ্ট","নষ্টা",
+  "বালের","বদমাশ","বদমাশি","জারজ","জারজের","নষ্টা",
   "কুত্তি","কুত্তির","শুয়োরি","মাদারচোদ","মাদারচোদন",
   "ভোদা","ভোদার","ভোদাই","পোদ","পোদা","পোদার",
-  "লাওরা","লাওরার","ছিনাল","ছিনালি","ডাইনি","ডাইনির",
-  "রান্ডি","রান্ডির","খানকির","মাগির","বেশ্যার",
+  "খানকির","মাগির","বেশ্যার",
   "চোদান","চোদানি","লেংটা","লেংটার","নাংগা","নাংগি",
-  "হিজরা","হিজড়া","হিজড়ার","কাজা","কাজার",
-  "বেক্কল","বেক্কলের","আবাল","আবালের","টালা","টালার",
-  "চামার","চামারের","নীচ","নীচের","কমিনা","কমিনার",
-  "বেইমান","বেইমানের","খবিশ","খবিশের","লম্পট","লম্পটের",
-  "কুলাঙ্গার","কুলাঙ্গারের","অপদার্থ","অপদার্থের",
-  "নপুংসক","নপুংসকের","ভণ্ড","ভণ্ডের","প্রতারক","প্রতারকের",
-  "চোর","চোরের","ডাকাত","ডাকাতের","জোচ্চোর","জোচ্চোরের",
-  "fuck","fucking","fucked","fucker","fuckers",
-  "motherfucker","motherfucking","mf",
-  "bitch","bitches","bitchy",
-  "bastard","bastards",
-  "asshole","assholes",
-  "dick","dicks","dickhead",
-  "pussy","pussies",
-  "sex","sexy","sexual",
-  "porn","porno","pornography",
-  "cunt","cunts",
-  "whore","whores",
-  "slut","sluts",
-  "nigga","nigger","niggas","niggers",
-  "retard","retarded",
-  "idiot","idiots","idiotic",
-  "stupid","stupider","stupidest",
-  "dumb","dumbass","dumbasses",
-  "moron","morons","moronic",
-  "fool","fools","foolish",
-  "jerk","jerks",
-  "loser","losers",
-  "shit","shits","shitty","shitting",
-  "crap","crappy",
-  "damn","dammit","damned",
-  "hell","hellish",
-  "bloody","bloodyhell",
-  "bugger","buggers",
-  "wanker","wankers",
-  "tosser","tosser",
-  "twat","twats",
-  "prick","pricks",
-  "cock","cocks","cocksucker",
-  "balls","ballsack",
-  "tits","titties",
-  "boobs","boobies",
-  "rape","raped","raping","rapist",
-  "molest","molested","molester",
-  "pedo","pedophile","pedophiles",
-  "kys","kyself",
-  "stfu","gtfo",
-  "wtf","wth",
-  "omfg","omg",
-  "fml","fubar",
-  "madarchod","bhenchod","bhenchodd",
-  "behenchod","behanchod","bhosdike","bhosdi",
-  "chutiya","chutiye","chutiyapa",
-  "gandu","gaandu","gaand",
-  "harami","haramkhor","haramzada",
-  "kutta","kutti","kutte","kutton",
-  "suar","suvar","suwar",
-  "randi","rand","randy",
-  "loda","lode","laura","lauda",
-  "bhosda","bhosdika",
-  "lund","chinal","chinaal",
-  "kamina","kamine","kaminay",
-  "badmash","badmashi","badzaat",
-  "najaiz","najayaz","haram",
-  "বোকা","বোকার","বোকাচোদা","বোকাচোদ",
-  "হাবলা","হাবলার","গবেট","গবেটের",
-  "ল্যাংড়া","ল্যাংড়ার","কানা","কানার",
-  "কালা","কালার","কুচকুচে","কুচকুচের",
-  "মোটা","মোটার","চিকনা","চিকনার",
-  "বামন","বামনের","খোঁড়া","খোঁড়ার",
-  "ঠেংগা","ঠেংগার","নেংটা","নেংটার",
-  "ছোটোলোক","ছোটোলোকের","হলদে","হলদের",
-  "ম্লেচ্ছ","ম্লেচ্ছের","ইয়াতিম","ইয়াতিমের",
-  "বেজন্মা","বেজন্মার","দুর্জন","দুর্জনের",
-  "অধম","অধমের","পাপী","পাপীর",
-  "ঘৃণ্য","ঘৃণ্যের","জঘন্য","জঘন্যের",
-  "লজ্জাহীন","লজ্জাহীনের","বেহায়া","বেহায়ার",
-  "নির্লজ্জ","নির্লজ্জের","বদনাম","বদনামের"
+  "হিজরা","হিজড়া","হিজড়ার",
+  "আবাল","আবালের",
+  "চামার","চামারের",
+  "খবিশ","খবিশের","লম্পট","লম্পটের",
+  "কুলাঙ্গার","কুলাঙ্গারের",
+  "বোকাচোদা","বোকাচোদ",
+  "নেংটা","নেংটার",
+  "বেজন্মা","বেজন্মার"
 ];
 
 const BAD_WORDS_NORMALIZED = new Set(
@@ -751,7 +679,6 @@ async function isBotAdminInGroup(groupId) {
 
     await cacheParticipants(participants);
 
-    /* Bot IDs */
     const botIds = [];
     const ownId = normalizeJid(sock?.user?.id);
     if (ownId) {
@@ -827,7 +754,6 @@ async function isSenderAdmin(remoteJid, message) {
     const participants = metadata?.participants || [];
     await cacheParticipants(participants);
 
-    /* Sender IDs */
     const senderIds = [participantJid];
     const senderPhone = await resolveLidToPhoneJid(participantJid);
     if (senderPhone) senderIds.push(senderPhone);
@@ -1311,7 +1237,7 @@ const DEAL_NOTICE_BOTTOM = `
 `;
 
 /* =========================================================
-   WELCOME / GOODBYE
+   WELCOME
 ========================================================= */
 
 function getWelcomeText(name, groupName) {
@@ -1338,24 +1264,6 @@ ${BACKUP_GROUP_URL}
 `;
 }
 
-function getGoodbyeText(name, groupName) {
-  const safeName = cleanName(name) || "Member";
-  const safeGroupName = cleanName(groupName) || "এই গ্রুপ";
-  return `
-╭━━━━━━━━━━━━━━━━━━━━╮
-        👋 *বিদায়*
-╰━━━━━━━━━━━━━━━━━━━━╯
-
-👋 *@${safeName}* চলে গেলেন।
-
-🌸 *${safeGroupName}*-এর সদস্য ছিলেন।
-
-💙 আবার আসবেন।
-
-🤍 *Piyas*
-`;
-}
-
 async function sendWelcome(groupId, participant) {
   try {
     if (!sock || !isBotEnabled(groupId)) return;
@@ -1376,28 +1284,6 @@ async function sendWelcome(groupId, participant) {
       await sock.sendMessage(groupId, { text: welcomeText.replace(`@${name}`, name) });
     }
   } catch (error) { console.log("❌ Welcome:", error?.message); }
-}
-
-async function sendGoodbye(groupId, participant) {
-  try {
-    if (!sock || !isBotEnabled(groupId)) return;
-    let metadata = null;
-    try { metadata = await getGroupMetadata(groupId); } catch {}
-    let member = findParticipant(metadata?.participants || [], participant?.id);
-    if (!member) member = findParticipant(metadata?.participants || [], participant?.lid);
-    if (!member) member = participant;
-
-    const name = getDisplayName(member);
-    const groupName = cleanName(metadata?.subject) || "এই গ্রুপ";
-    const phoneJid = await getPhoneJid(member);
-    const text = getGoodbyeText(name, groupName);
-
-    if (isPhoneJid(phoneJid)) {
-      await sock.sendMessage(groupId, { text, mentions: [phoneJid] });
-    } else {
-      await sock.sendMessage(groupId, { text: text.replace(`@${name}`, name) });
-    }
-  } catch (error) { console.log("❌ Goodbye:", error?.message); }
 }
 
 /* =========================================================
@@ -1554,7 +1440,7 @@ async function moderateMessage(remoteJid, message, text) {
             warningCount = addWarning(remoteJid, targetJid);
           }
           if (isModerationEnabled(remoteJid, "warnings")) {
-            await sendModerationWarning(remoteJid, message, `Bad Word: ${badWord}`, warningCount);
+            await sendModerationWarning(remoteJid, message, `Bad Word`, warningCount);
           }
         }
         return true;
@@ -2015,7 +1901,7 @@ async function startBot() {
     sock.ev.on("contacts.upsert", c => { try { saveContacts(c); } catch {} });
     sock.ev.on("contacts.update", c => { try { saveContacts(c); } catch {} });
 
-    /* GROUP PARTICIPANTS */
+    /* GROUP PARTICIPANTS — Leave মেসেজ বন্ধ */
     sock.ev.on("group-participants.update", async event => {
       try {
         const groupId = event?.id;
@@ -2032,9 +1918,7 @@ async function startBot() {
         if (action === "add") {
           for (const p of participants) await sendWelcome(groupId, p);
         }
-        if (action === "remove") {
-          for (const p of participants) await sendGoodbye(groupId, p);
-        }
+        /* remove action বন্ধ — কেউ Leave নিলে কোনো মেসেজ যাবে না */
       } catch (error) { console.log("❌ Participant error:", error?.message); }
     });
 
