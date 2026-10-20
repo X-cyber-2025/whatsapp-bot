@@ -296,7 +296,7 @@ function containsLink(text) {
   return false;
 }
 
-// 🆕 ফোন নাম্বার ডিটেকশন (স্পেস ও হিডেন ক্যারেক্টার রিমুভ করে চেক করবে)
+// 🆕 ফোন নাম্বার ডিটেকশন (আপডেট করা হয়েছে - ৮৮ এবং ০ ছাড়াও ধরবে)
 function toEnglishDigits(str) {
   return String(str || "").replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
 }
@@ -305,16 +305,16 @@ function containsPhoneNumber(text) {
   if (!text) return null;
   const englishText = toEnglishDigits(text).replace(/[\u200B-\u200D\uFEFF]/g, "");
   const cleanText = englishText.replace(/[\s\-\(\)]/g, ""); 
-  const BD_PHONE_PATTERN = /(?:\+?88)?01[3-9]\d{8}/g;
+  const BD_PHONE_PATTERN = /(?:\+?88)?0?1[3-9]\d{8}/g;
   const match = cleanText.match(BD_PHONE_PATTERN);
   return match ? match[0] : null;
 }
 
-// 🆕 @everyone ডিটেকশন
+// 🆕 @everyone ডিটেকশন (আপডেট করা হয়েছে - \b ব্যবহার করায় স্পেস ছাড়াও ধরবে)
 function containsEveryoneMention(text) {
   if (!text) return null;
   const normalized = String(text).toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
-  if (/(?:^|\s)@(everyone|everybody|all|allmembers|all_members|here|সবাই|সকলে|সকল)(?:\s|$)/i.test(normalized)) {
+  if (/@(everyone|everybody|all|allmembers|all_members|here|সবাই|সকলে|সকল)\b/i.test(normalized)) {
     return "everyone";
   }
   return null;
@@ -720,7 +720,7 @@ async function sendCopyButtons(remoteJid, commands) {
 }
 
 /* =========================================================
-   MODERATION WARNING 🆕 (কারণসহ)
+   MODERATION WARNING (কারণসহ)
 ========================================================= */
 
 async function sendModerationWarning(remoteJid, message, reason, warningCount) {
