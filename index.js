@@ -80,7 +80,9 @@ const MODERATION_DEFAULTS = {
   links: true,
   spam: true,
   warnings: true,
-  antiForward: true
+  antiForward: true,
+  phoneNumbers: true,
+  everyoneMention: true
 };
 
 /* =========================================================
@@ -118,33 +120,24 @@ const BAD_WORDS_NORMALIZED = new Set(
 
 /* ✅ SAFE WORDS — false positive বন্ধ */
 const SAFE_WORDS = new Set([
-  /* বাল-সম্পর্কিত */
   "বালিকা","বালিশ","বালি","বালক","বাল্য","বাংলা","বাংলাবালা",
   "বালতি","বালু","বালাই","বালিশের","বাল্যবিবাহ","বালিকারা",
-  /* পদ */
   "পদ","পদ্ম","পদক্ষেপ","পদার্থ","পদক","পদের","পদ্মা","পদ্মাবতী",
-  /* চুড়ি */
   "চুড়ি","চুড়ির","চুড়িওয়ালা",
-  /* হিজড়া */
   "হিজড়া",
-  /* অন্যান্য */
   "আবাল","আবালের",
   "লম্পট","লম্পটের",
   "বদমাশ","বদমাশি",
   "নষ্টা",
   "বেজন্মা","বেজন্মার",
-  /* সালাম-সম্পর্কিত */
   "সালাম","সালামু","সালামুন","সালামুআলাইকুম",
   "আসসালামু","আসসালামুআলাইকুম","আসসালামুয়ালাইকুম",
   "ওয়ালাইকুম","ওয়ালাইকুমসালাম","ওয়াসালাম",
   "ইসলাম","ইসলামিক","মুসলিম","মুসলমান","মুসলিমগণ",
   "সালামি","সালামির","সালাত","সালাতুল",
   "সালাতু","সালাতুন","সালাফি","সালাফ",
-  /* হারাম (ভালো অর্থে) */
   "হারাম","হারামকরা",
-  /* শালীন */
   "শালীন","শালীনতা",
-  /* 🆕 মাসালা/সালিশ (নতুন) */
   "মাসালা","মাসালার","মাসালায়","মাসালাতে","মাসালাওয়ালা",
   "গরমমাসালা","মাসালাচাটনি",
   "সালিশ","সালিস","সালিশি","সালিশে"
@@ -158,7 +151,6 @@ function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/* bad word pattern — শব্দের মাঝে separator (space, dot, dash, etc.) allow */
 function buildFlexPattern(word) {
   return word.split("").map(escapeRegex).join("[\\s\\-_.!?*]*");
 }
@@ -263,7 +255,7 @@ function removeMute(groupId, memberJid) {
 }
 
 /* =========================================================
-   BAD WORD DETECTION (বাক্যের ভেতরে + obfuscation সহ)
+   BAD WORD DETECTION
 ========================================================= */
 
 function normalizeForBadWordCheck(text) {
@@ -280,13 +272,9 @@ function containsBadWord(text) {
   const normalized = normalizeForBadWordCheck(raw);
   if (!normalized || normalized.length < 2) return null;
 
-  /* পুরো মেসেজ safe word হলে কিছুই করবে না */
   if (SAFE_WORDS.has(normalized)) return null;
-
-  /* পুরো মেসেজ হুবহু bad word হলে → ধরবে */
   if (BAD_WORDS_NORMALIZED.has(normalized)) return normalized;
 
-  /* 🆕 substring check on raw — obfuscation (সা.লা) সহ সব ধরবে */
   for (const badWord of BAD_WORDS_NORMALIZED) {
     if (badWord.length < 2) continue;
 
@@ -298,7 +286,6 @@ function containsBadWord(text) {
       const startIdx = match.index;
       const endIdx = startIdx + match[0].length;
 
-      /* এই ম্যাচটা কোনো safe word এর ভেতরে আছে কিনা দেখি */
       let insideSafe = false;
       for (const safe of SAFE_WORDS) {
         if (!safe.includes(badWord)) continue;
@@ -344,6 +331,38 @@ function containsLink(text) {
     if (pattern.test(value)) return true;
   }
   return false;
+}
+
+/* =========================================================
+   PHONE NUMBER DETECTION 🆕
+========================================================= */
+
+function toEnglishDigits(str) {
+  return String(str || "").replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
+}
+
+/* +8801XXXXXXXXX | 8801XXXXXXXXX | 01XXXXXXXXX | Bengali digits */
+const BD_PHONE_PATTERN = /(?<!\d)(?:\+?88[\s\-]?)?0?1[3-9](?:[\s\-]?\d){8}(?!\d)/g;
+
+function containsPhoneNumber(text) {
+  if (!text) return null;
+  const value = toEnglishDigits(text);
+  BD_PHONE_PATTERN.lastIndex = 0;
+  const match = BD_PHONE_PATTERN.exec(value);
+  return match ? match[0] : null;
+}
+
+/* =========================================================
+   @EVERYONE DETECTION 🆕
+========================================================= */
+
+const EVERYONE_PATTERN = /@(everyone|everybody|all|allmembers|all_members|here|সবাই|সকলে|সকল)(?![a-zA-Z\u0980-\u09FF])/giu;
+
+function containsEveryoneMention(text) {
+  if (!text) return null;
+  EVERYONE_PATTERN.lastIndex = 0;
+  const match = EVERYONE_PATTERN.exec(String(text));
+  return match ? match[0] : null;
 }
 
 function normalizeSpamText(text) {
@@ -922,7 +941,7 @@ async function isSenderAdmin(remoteJid, message) {
 }
 
 /* =========================================================
-   NICE MENTION HELPER 🆕
+   NICE MENTION HELPER
 ========================================================= */
 
 async function buildMention(participant, options = {}) {
@@ -1180,6 +1199,8 @@ ${commandStatus}
 ╭─❖ 🛡️ *MODERATION*
 │ ${mod.badWords ? "🟢" : "🔴"} Bad Word
 │ ${mod.links ? "🟢" : "🔴"} Link
+│ ${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number
+│ ${mod.everyoneMention ? "🟢" : "🔴"} @everyone
 │ ${mod.spam ? "🟢" : "🔴"} Spam
 │ ${mod.warnings ? "🟢" : "🔴"} Warning
 │ ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward
@@ -1253,6 +1274,8 @@ ${commandLines.join("\n")}
 🛡️ MOD:
 ${mod.badWords ? "🟢" : "🔴"} Bad Word
 ${mod.links ? "🟢" : "🔴"} Link
+${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number
+${mod.everyoneMention ? "🟢" : "🔴"} @everyone
 ${mod.spam ? "🟢" : "🔴"} Spam
 ${mod.warnings ? "🟢" : "🔴"} Warning
 ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward
@@ -1281,6 +1304,8 @@ ${disabledText}
 ╭─❖ 🛡️ *MODERATION*
 │ ${mod.badWords ? "🟢" : "🔴"} Bad Word
 │ ${mod.links ? "🟢" : "🔴"} Link
+│ ${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number
+│ ${mod.everyoneMention ? "🟢" : "🔴"} @everyone
 │ ${mod.spam ? "🟢" : "🔴"} Spam
 │ ${mod.warnings ? "🟢" : "🔴"} Warning
 │ ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward
@@ -1320,12 +1345,16 @@ const GROUP_RULES = `
 
 8️⃣ সমস্যা হলে Admin-কে জানান।
 
-🛡️ *Moderation:*
-Bad Word, Link, Spam, Forward
-শনাক্ত হলে Delete হবে।
+🚫 *কঠোর নিয়ম:*
+9️⃣ গ্রুপে ফোন নাম্বার দেবেন না।
+🔟 @everyone / @all মেনশন করবেন না।
 
-⚠️ Admin/Owner-এর Message
-Moderation থেকে বাদ।
+🛡️ *Auto Moderation:*
+Bad Word • Link • Spam • Forward
+Phone Number • @everyone
+→ শনাক্ত হলে সাথে সাথে Delete।
+
+⚠️ Admin/Owner-এর ক্ষেত্রে প্রযোজ্য নয়।
 
 🤍 *Piyas*
 `;
@@ -1620,6 +1649,42 @@ async function moderateMessage(remoteJid, message, text) {
       return true;
     }
 
+    /* PHONE NUMBER 🆕 */
+    if (isModerationEnabled(remoteJid, "phoneNumbers")) {
+      const phone = containsPhoneNumber(text);
+      if (phone) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) {
+          let warningCount = 0;
+          if (isModerationEnabled(remoteJid, "warnings") && targetJid) {
+            warningCount = addWarning(remoteJid, targetJid);
+          }
+          if (isModerationEnabled(remoteJid, "warnings")) {
+            await sendModerationWarning(remoteJid, message, "Phone Number", warningCount);
+          }
+        }
+        return true;
+      }
+    }
+
+    /* @EVERYONE 🆕 */
+    if (isModerationEnabled(remoteJid, "everyoneMention")) {
+      const everyone = containsEveryoneMention(text);
+      if (everyone) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) {
+          let warningCount = 0;
+          if (isModerationEnabled(remoteJid, "warnings") && targetJid) {
+            warningCount = addWarning(remoteJid, targetJid);
+          }
+          if (isModerationEnabled(remoteJid, "warnings")) {
+            await sendModerationWarning(remoteJid, message, "@everyone / @all Mention", warningCount);
+          }
+        }
+        return true;
+      }
+    }
+
     /* ANTI-FORWARD */
     if (isModerationEnabled(remoteJid, "antiForward") && targetJid) {
       if (isForwardedMessage(message) && isForwardTooSoon(remoteJid, targetJid)) {
@@ -1679,7 +1744,7 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
 
 /* =========================================================
-   ADMIN LIST 🆕 (সুন্দর মেনশন)
+   ADMIN LIST
 ========================================================= */
 
 async function sendAdminList(remoteJid) {
@@ -1743,7 +1808,7 @@ async function sendAdminList(remoteJid) {
 }
 
 /* =========================================================
-   DEAL NOTICE 🆕 (সুন্দর মেনশন)
+   DEAL NOTICE
 ========================================================= */
 
 async function sendDealNotice(remoteJid) {
@@ -1781,7 +1846,7 @@ async function sendDealNotice(remoteJid) {
 }
 
 /* =========================================================
-   MENTION COMMAND 🆕
+   MENTION COMMAND
 ========================================================= */
 
 async function handleMention(remoteJid, message, args) {
@@ -1822,7 +1887,7 @@ async function handleMention(remoteJid, message, args) {
 }
 
 /* =========================================================
-   TAG ALL 🆕 (সুন্দর সেকশন)
+   TAG ALL
 ========================================================= */
 
 async function handleTagAll(remoteJid, message, args) {
@@ -2097,7 +2162,6 @@ function getMessageText(message) {
   ).trim();
 }
 
-/* Reply-based mention সহ (mentioned আগে, reply পরে) */
 function getMentionedJids(message) {
   const msg = message?.message;
   if (!msg) return [];
@@ -2345,6 +2409,8 @@ async function startBot() {
               setModerationStatus(remoteJid, "spam", true);
               setModerationStatus(remoteJid, "warnings", true);
               setModerationStatus(remoteJid, "antiForward", true);
+              setModerationStatus(remoteJid, "phoneNumbers", true);
+              setModerationStatus(remoteJid, "everyoneMention", true);
               await sock.sendMessage(remoteJid, { text: "🛡️ *MODERATION ON*" });
               continue;
             }
@@ -2355,6 +2421,8 @@ async function startBot() {
               setModerationStatus(remoteJid, "spam", false);
               setModerationStatus(remoteJid, "warnings", false);
               setModerationStatus(remoteJid, "antiForward", false);
+              setModerationStatus(remoteJid, "phoneNumbers", false);
+              setModerationStatus(remoteJid, "everyoneMention", false);
               await sock.sendMessage(remoteJid, { text: "🛡️ *MODERATION OFF*" });
               continue;
             }
