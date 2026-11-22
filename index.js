@@ -1343,7 +1343,7 @@ async function startBot() {
             }
 
             /* SCHEDULE MESSAGE (SMART FORMAT WITH HYPHEN FIX) */
-            const rawCommandEn = convertBanglaDigits(rawCommand);
+            const rawCommandEn = convertBanglaDigits(rawCommand.replace(/^\//, ""));
             const isDirectSchedule = /^\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?[\s\-:]+\d{1,2}(?::\d{1,2})?[\s\-:]*\s*(am|pm|mp|এএম|পিএম)?$/i.test(rawCommandEn);
 
             if (command === "schedule" || isDirectSchedule) {
@@ -1354,7 +1354,7 @@ async function startBot() {
 
               let fullText = args.join(" ");
               if (isDirectSchedule) {
-                fullText = rawCommand + " " + fullText; 
+                fullText = rawCommand.replace(/^\//, "") + " " + fullText; 
               }
               
               const enText = convertBanglaDigits(fullText);
