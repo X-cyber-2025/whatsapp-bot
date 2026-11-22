@@ -1342,9 +1342,9 @@ async function startBot() {
               await lockGroup(remoteJid, durationMs); continue;
             }
 
-            /* SCHEDULE MESSAGE (SMART FORMAT) */
+            /* SCHEDULE MESSAGE (SMART FORMAT WITH HYPHEN FIX) */
             const rawCommandEn = convertBanglaDigits(rawCommand);
-            const isDirectSchedule = /^\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?[:\s]+\d{1,2}(?::\d{1,2})?\s*(am|pm|mp|এএম|পিএম)?$/i.test(rawCommandEn);
+            const isDirectSchedule = /^\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?[\s\-:]+\d{1,2}(?::\d{1,2})?[\s\-:]*\s*(am|pm|mp|এএম|পিএম)?$/i.test(rawCommandEn);
 
             if (command === "schedule" || isDirectSchedule) {
               if (!senderIsAdmin) {
@@ -1359,10 +1359,10 @@ async function startBot() {
               
               const enText = convertBanglaDigits(fullText);
               
-              const match = enText.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?[:\s]+(\d{1,2})(?::(\d{1,2}))?\s*(am|pm|mp|এএম|পিএম)?\s+(.+)$/i);
+              const match = enText.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?[\s\-:]+(\d{1,2})(?::(\d{1,2}))?[\s\-:]*\s*(am|pm|mp|এএম|পিএম)?\s+(.+)$/i);
 
               if (!match) {
-                await sock.sendMessage(remoteJid, { text: `🕒 *SCHEDULE MESSAGE*\n\n*ব্যবহার:*\n/26-12-2026:4:2pm শুভ জন্মদিন\n\n*আরও কিছু উদাহরণ:*\n/25/12/2024 14:00 ঈদ মোবারক\n/schedule 15-08 9:00am স্বাধীনতা দিবস` });
+                await sock.sendMessage(remoteJid, { text: `🕒 *SCHEDULE MESSAGE*\n\n*ব্যবহার:*\n/26-12-2026-4:2pm শুভ জন্মদিন\n\n*আরও কিছু উদাহরণ:*\n/25/12/2024 14:00 ঈদ মোবারক\n/schedule 15-08 9:00am স্বাধীনতা দিবস` });
                 continue;
               }
 
