@@ -1048,25 +1048,27 @@ function findParticipant(participants = [], jid) {
 }
 
 /* =========================================================
-   BOT JID
+   BOT JID & ADMIN CHECK (FIXED FOR LID/PN)
 ========================================================= */
 
 function getBotPhoneJid() {
   try {
     const ownId = normalizeJid(sock?.user?.id);
-    if (isPhoneJid(ownId)) return ownId.split(":")[0];
-    if (isLidJid(ownId)) {
-      const cached = lidToPhoneJid.get(ownId) || contactPhoneJids.get(ownId);
-      if (isPhoneJid(cached)) return cached;
+    if (ownId) {
+      const num = ownId.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+      if (num.length >= 8) return num + "@s.whatsapp.net";
+    }
+    if (sock?.user?.lid) {
+      const lidNum = sock.user.lid.split("@")[0].replace(/[^0-9]/g, "");
+      if (lidNum.length >= 8) {
+        const cached = lidToPhoneJid.get(sock.user.lid) || contactPhoneJids.get(sock.user.lid);
+        if (isPhoneJid(cached)) return cached;
+      }
     }
     if (PHONE_NUMBER) return phoneNumberToJid(PHONE_NUMBER);
     return null;
   } catch { return null; }
 }
-
-/* =========================================================
-   BOT ADMIN CHECK
-========================================================= */
 
 async function isBotAdminInGroup(groupId) {
   try {
@@ -1074,28 +1076,38 @@ async function isBotAdminInGroup(groupId) {
     const metadata = await sock.groupMetadata(groupId);
     const participants = metadata?.participants || [];
     if (!participants.length) return false;
-    await cacheParticipants(participants);
-    const botJid = normalizeJid(sock?.user?.id);
-    const botPhoneJid = getBotPhoneJid();
-    let botParticipant = findParticipant(participants, botJid);
-    if (!botParticipant && botPhoneJid) botParticipant = findParticipant(participants, botPhoneJid);
-    if (!botParticipant && botPhoneJid) {
-      const botNumber = botPhoneJid.split("@")[0].replace(/[^0-9]/g, "");
-      botParticipant = participants.find(p => {
-        const phone = String(p?.phoneNumber || "").replace(/@s.whatsapp.net/g, "").replace(/[^0-9]/g, "");
-        return phone && phone === botNumber;
-      });
+
+    // বটের সম্ভাব্য সব নম্বর/আইডি সংগ্রহ
+    const botNumbers = new Set();
+    if (sock?.user?.id) {
+      const idNum = sock.user.id.split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+      if (idNum) botNumbers.add(idNum);
     }
-    if (!botParticipant && botJid && isLidJid(botJid)) {
-      const resolved = await resolveLidToPhoneJid(botJid);
-      if (resolved) botParticipant = findParticipant(participants, resolved);
+    if (sock?.user?.lid) {
+      const lidNum = sock.user.lid.split("@")[0].replace(/[^0-9]/g, "");
+      if (lidNum) botNumbers.add(lidNum);
     }
+    if (PHONE_NUMBER) botNumbers.add(PHONE_NUMBER);
+
+    let botParticipant = null;
+    for (const p of participants) {
+      const pIds = [p.id, p.lid, p.phoneNumber].filter(Boolean);
+      for (const pid of pIds) {
+        const pidNum = String(pid).split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+        if (pidNum && botNumbers.has(pidNum)) {
+          botParticipant = p;
+          break;
+        }
+      }
+      if (botParticipant) break;
+    }
+
     if (!botParticipant) {
-      console.log(`🚫 Bot participant not found: ${groupId}`);
+      console.log(`🚫 Bot participant not found in metadata: ${groupId}`);
       return false;
     }
+
     const admin = isAdminParticipant(botParticipant);
-    console.log(`${admin ? "👑" : "🚫"} Bot Admin Status: ${groupId} → ${admin ? "ADMIN" : "NOT ADMIN"}`);
     return admin;
   } catch (error) {
     console.log("⚠️ Bot admin check error:", error?.message);
@@ -1109,7 +1121,7 @@ async function isGroupAllowed(groupId) {
 }
 
 /* =========================================================
-   SENDER ADMIN
+   SENDER ADMIN (FIXED FOR LID/PN)
 ========================================================= */
 
 async function isSenderAdmin(remoteJid, message) {
@@ -1117,26 +1129,33 @@ async function isSenderAdmin(remoteJid, message) {
     if (!sock || !remoteJid) return false;
     const participantJid = message?.key?.participant;
     if (!participantJid) return false;
+
     const metadata = await sock.groupMetadata(remoteJid);
     const participants = metadata?.participants || [];
-    await cacheParticipants(participants);
-    let sender = findParticipant(participants, participantJid);
-    if (!sender) {
-      const senderPhone = await resolveLidToPhoneJid(participantJid);
-      if (senderPhone) sender = findParticipant(participants, senderPhone);
+
+    const senderNum = String(participantJid).split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+    if (!senderNum) return false;
+
+    let sender = null;
+    for (const p of participants) {
+      const pIds = [p.id, p.lid, p.phoneNumber].filter(Boolean);
+      for (const pid of pIds) {
+        const pidNum = String(pid).split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
+        if (pidNum && pidNum === senderNum) {
+          sender = p;
+          break;
+        }
+      }
+      if (sender) break;
     }
-    if (!sender) {
-      sender = participants.find(p =>
-        p?.id === participantJid || p?.lid === participantJid || p?.phoneNumber === participantJid
-      );
-    }
-    if (!sender) return false;
-    return isAdminParticipant(sender);
+
+    return sender ? isAdminParticipant(sender) : false;
   } catch (error) {
     console.log("⚠️ Admin check error:", error?.message);
     return false;
   }
 }
+
 /* =========================================================
    COPY BUTTON
 ========================================================= */
@@ -1193,7 +1212,7 @@ async function sendCopyButtons(remoteJid, commands) {
 }
 
 /* =========================================================
-   PUBLIC MENU (Tag All যোগ)
+   PUBLIC MENU
 ========================================================= */
 
 function buildMenuText(remoteJid) {
@@ -1710,7 +1729,7 @@ async function sendDealNotice(remoteJid) {
 }
 
 /* =========================================================
-   WELCOME
+   WELCOME & GOODBYE
 ========================================================= */
 
 function getWelcomeText(name, groupName) {
@@ -1777,10 +1796,6 @@ async function sendWelcome(groupId, participant) {
     console.log("❌ Welcome send error:", error?.message);
   }
 }
-
-/* =========================================================
-   NEW: GOODBYE
-========================================================= */
 
 function getGoodbyeText(name, groupName) {
   const safeName = cleanName(name) || "Member";
@@ -1957,10 +1972,6 @@ async function checkExpiredGroupLocks() {
   }
 }
 
-/* =========================================================
-   NEW: MUTE EXPIRY CHECK
-========================================================= */
-
 async function checkExpiredMutes() {
   if (!sock) return;
   const now = Date.now();
@@ -2066,7 +2077,7 @@ function getMentionedJids(message) {
 }
 
 /* =========================================================
-   NEW: TAG ALL
+   TAG ALL & MUTE
 ========================================================= */
 
 async function handleTagAll(remoteJid, message, args) {
@@ -2098,10 +2109,6 @@ async function handleTagAll(remoteJid, message, args) {
     await sock.sendMessage(remoteJid, { text: "❌ Tag All করতে সমস্যা হয়েছে।" });
   }
 }
-
-/* =========================================================
-   NEW: MUTE COMMANDS
-========================================================= */
 
 async function handleMute(remoteJid, message, args) {
   try {
@@ -2584,7 +2591,7 @@ async function startBot() {
 }
 
 /* =========================================================
-   GLOBAL ERRORS
+   GLOBAL ERRORS & SHUTDOWN
 ========================================================= */
 
 process.on("uncaughtException", error => {
@@ -2594,10 +2601,6 @@ process.on("uncaughtException", error => {
 process.on("unhandledRejection", error => {
   console.log("❌ Unhandled Rejection:", error);
 });
-
-/* =========================================================
-   SHUTDOWN
-========================================================= */
 
 async function shutdown() {
   console.log("\n🛑 Shutting down bot...");
