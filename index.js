@@ -27,7 +27,6 @@ const PAIRING_NUMBER_FILE = "./pairing_number.txt";
 const BOT_STATUS_FILE = "./bot_status.json";
 const WARNING_FILE = "./warnings.json";
 const MUTE_FILE = "./muted.json";
-const SCHEDULE_FILE = "./scheduled_messages.json";
 
 const GROUP_LOCK_CHECK_INTERVAL = 10 * 1000;
 
@@ -36,7 +35,7 @@ let reconnecting = false;
 let pairingRequested = false;
 
 /* =========================================================
-   CACHE & MEMORY
+   CACHE
 ========================================================= */
 
 const groupMetadataCache = new Map();
@@ -52,6 +51,10 @@ const contactNames = new Map();
 const contactPhoneJids = new Map();
 const lidToPhoneJid = new Map();
 
+/* =========================================================
+   MEMORY
+========================================================= */
+
 const spamTracker = new Map();
 const SPAM_WINDOW_MS = 60 * 1000;
 
@@ -65,7 +68,6 @@ const FORWARD_WINDOW_MS = 10 * 60 * 1000;
 let mutedUsers = {};
 let warnings = {};
 let botStatus = {};
-let scheduledMessages = [];
 
 const logger = P({ level: "silent" });
 
@@ -90,15 +92,26 @@ const MODERATION_DEFAULTS = {
 const BAD_WORDS = [
   "সালা","শালা","সালি","সালী","শালি","ষালি","ষালী",
   "খাংকি","খাংকী","খানকি","খানকী","মাগি","মাগী",
-  "বেসসা","বেশ্যা","বেশা", "চোদা","চোদন","চুদাচুদি",
+  "বেসসা","বেশ্যা","বেশা",
+  "চোদা","চোদন","চুদাচুদি",
   "হারামি","হারামী","হারামজাদা","হারামজাদী",
-  "কুত্তা","কুত্তার","শুয়োর","শুয়োরের", "বাঞ্চোদ",
-  "জারজ","জারজের", "কুত্তি","কুত্তির", "শুয়োরি",
-  "মাদারচোদ","মাদারচোদন", "ভোদা","ভোদার","ভোদাই",
-  "পোদা","পোদার", "খানকির","মাগির","বেশ্যার",
-  "চোদান","চোদানি", "লেংটা","লেংটার", "নাংগা","নাংগি",
-  "হিজড়ার", "চামারের", "কুলাঙ্গারের", "বোকাচোদা","বোকাচোদ",
-  "নেংটা","নেংটার", "fuck","bitch","sex","porn","asshole","bastard"
+  "কুত্তা","কুত্তার","শুয়োর","শুয়োরের",
+  "বাঞ্চোদ",
+  "জারজ","জারজের",
+  "কুত্তি","কুত্তির",
+  "শুয়োরি",
+  "মাদারচোদ","মাদারচোদন",
+  "ভোদা","ভোদার","ভোদাই",
+  "পোদা","পোদার",
+  "খানকির","মাগির","বেশ্যার",
+  "চোদান","চোদানি",
+  "লেংটা","লেংটার",
+  "নাংগা","নাংগি",
+  "হিজড়ার",
+  "চামারের",
+  "কুলাঙ্গারের",
+  "বোকাচোদা","বোকাচোদ",
+  "নেংটা","নেংটার"
 ];
 
 const BAD_WORDS_NORMALIZED = new Set(
@@ -109,28 +122,40 @@ const SAFE_WORDS = new Set([
   "বালিকা","বালিশ","বালি","বালক","বাল্য","বাংলা","বাংলাবালা",
   "বালতি","বালু","বালাই","বালিশের","বাল্যবিবাহ","বালিকারা",
   "পদ","পদ্ম","পদক্ষেপ","পদার্থ","পদক","পদের","পদ্মা","পদ্মাবতী",
-  "চুড়ি","চুড়ির","চুড়িওয়ালা", "হিজড়া", "আবাল","আবালের",
-  "লম্পট","লম্পটের", "বদমাশ","বদমাশি", "নষ্টা", "বেজন্মা","বেজন্মার",
+  "চুড়ি","চুড়ির","চুড়িওয়ালা",
+  "হিজড়া",
+  "আবাল","আবালের",
+  "লম্পট","লম্পটের",
+  "বদমাশ","বদমাশি",
+  "নষ্টা",
+  "বেজন্মা","বেজন্মার",
   "সালাম","সালামু","সালামুন","সালামুআলাইকুম",
   "আসসালামু","আসসালামুআলাইকুম","আসসালামুয়ালাইকুম",
   "ওয়ালাইকুম","ওয়ালাইকুমসালাম","ওয়াসালাম",
   "ইসলাম","ইসলামিক","মুসলিম","মুসলমান","মুসলিমগণ",
   "সালামি","সালামির","সালাত","সালাতুল",
   "সালাতু","সালাতুন","সালাফি","সালাফ",
-  "হারাম","হারামকরা", "শালীন","শালীনতা",
+  "হারাম","হারামকরা",
+  "শালীন","শালীনতা",
   "মাসালা","মাসালার","মাসালায়","মাসালাতে","মাসালাওয়ালা",
-  "গরমমাসালা","মাসালাচাটনি", "সালিশ","সালিস","সালিশি","সালিশে"
+  "গরমমাসালা","মাসালাচাটনি",
+  "সালিশ","সালিস","সালিশি","সালিশে"
 ]);
 
 /* =========================================================
    REGEX HELPERS
 ========================================================= */
 
-function escapeRegex(str) { return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
-function buildFlexPattern(word) { return word.split("").map(escapeRegex).join("[\\s\\-_.!?*]*"); }
+function escapeRegex(str) {
+  return String(str).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildFlexPattern(word) {
+  return word.split("").map(escapeRegex).join("[\\s\\-_.!?*]*");
+}
 
 /* =========================================================
-   DATA LOADERS & SAVERS
+   WARNING & MUTE DATA
 ========================================================= */
 
 function loadWarnings() {
@@ -140,7 +165,28 @@ function loadWarnings() {
     console.log("📂 Warning data loaded.");
   } catch (error) { warnings = {}; }
 }
-function saveWarnings() { try { fs.writeFileSync(WARNING_FILE, JSON.stringify(warnings, null, 2), "utf8"); } catch {} }
+
+function saveWarnings() {
+  try { fs.writeFileSync(WARNING_FILE, JSON.stringify(warnings, null, 2), "utf8"); } catch {}
+}
+
+function getGroupWarningData(groupId) {
+  if (!warnings[groupId]) warnings[groupId] = {};
+  return warnings[groupId];
+}
+
+function getMemberWarningCount(groupId, memberJid) {
+  if (!groupId || !memberJid) return 0;
+  return Number(getGroupWarningData(groupId)[memberJid] || 0);
+}
+
+function addWarning(groupId, memberJid) {
+  if (!groupId || !memberJid) return 0;
+  const data = getGroupWarningData(groupId);
+  data[memberJid] = getMemberWarningCount(groupId, memberJid) + 1;
+  saveWarnings();
+  return data[memberJid];
+}
 
 function loadMuted() {
   try {
@@ -149,49 +195,48 @@ function loadMuted() {
     console.log("📂 Mute data loaded.");
   } catch (error) { mutedUsers = {}; }
 }
-function saveMuted() { try { fs.writeFileSync(MUTE_FILE, JSON.stringify(mutedUsers, null, 2), "utf8"); } catch {} }
 
-function loadScheduledMessages() {
-  try {
-    if (!fs.existsSync(SCHEDULE_FILE)) { scheduledMessages = []; return; }
-    scheduledMessages = JSON.parse(fs.readFileSync(SCHEDULE_FILE, "utf8")) || [];
-    console.log(`📂 Scheduled messages loaded: ${scheduledMessages.length}`);
-  } catch (error) { scheduledMessages = []; }
-}
-function saveScheduledMessages() { try { fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(scheduledMessages, null, 2), "utf8"); } catch {} }
-
-/* =========================================================
-   WARNING & MUTE HELPER FUNCTIONS
-========================================================= */
-
-function getGroupWarningData(groupId) { if (!warnings[groupId]) warnings[groupId] = {}; return warnings[groupId]; }
-function getMemberWarningCount(groupId, memberJid) { return (!groupId || !memberJid) ? 0 : Number(getGroupWarningData(groupId)[memberJid] || 0); }
-function addWarning(groupId, memberJid) {
-  if (!groupId || !memberJid) return 0;
-  const data = getGroupWarningData(groupId);
-  data[memberJid] = getMemberWarningCount(groupId, memberJid) + 1;
-  saveWarnings(); return data[memberJid];
+function saveMuted() {
+  try { fs.writeFileSync(MUTE_FILE, JSON.stringify(mutedUsers, null, 2), "utf8"); } catch {}
 }
 
 function getMuteKey(groupId, memberJid) { return `${groupId}:${memberJid}`; }
+
 function isMuted(groupId, memberJid) {
   if (!groupId || !memberJid) return false;
   const key = getMuteKey(groupId, memberJid);
   const data = mutedUsers[key];
   if (!data) return false;
-  if (Date.now() >= data.until) { delete mutedUsers[key]; saveMuted(); return false; }
+  if (Date.now() >= data.until) {
+    delete mutedUsers[key];
+    saveMuted();
+    return false;
+  }
   return true;
 }
-function getMuteRemaining(groupId, memberJid) { return (!groupId || !memberJid) ? 0 : Math.max(0, (mutedUsers[getMuteKey(groupId, memberJid)]?.until || 0) - Date.now()); }
+
+function getMuteRemaining(groupId, memberJid) {
+  if (!groupId || !memberJid) return 0;
+  const data = mutedUsers[getMuteKey(groupId, memberJid)];
+  if (!data) return 0;
+  return Math.max(0, data.until - Date.now());
+}
+
 function setMute(groupId, memberJid, durationMs) {
   if (!groupId || !memberJid) return false;
   mutedUsers[getMuteKey(groupId, memberJid)] = { until: Date.now() + durationMs, mutedAt: Date.now() };
-  saveMuted(); return true;
+  saveMuted();
+  return true;
 }
+
 function removeMute(groupId, memberJid) {
   if (!groupId || !memberJid) return false;
   const key = getMuteKey(groupId, memberJid);
-  if (mutedUsers[key]) { delete mutedUsers[key]; saveMuted(); return true; }
+  if (mutedUsers[key]) {
+    delete mutedUsers[key];
+    saveMuted();
+    return true;
+  }
   return false;
 }
 
@@ -199,7 +244,10 @@ function removeMute(groupId, memberJid) {
    DETECTION HELPERS
 ========================================================= */
 
-function normalizeForBadWordCheck(text) { return String(text || "").toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/[\s\-_.,!?()[\]{}:;'"`~|\\/*+@#$%^&]/g, ""); }
+function normalizeForBadWordCheck(text) {
+  return String(text || "").toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/[\s\-_.,!?()[\]{}:;'"`~|\\/*+@#$%^&]/g, "");
+}
+
 function containsBadWord(text) {
   if (!text) return null;
   const raw = String(text).toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "");
@@ -210,17 +258,23 @@ function containsBadWord(text) {
 
   for (const badWord of BAD_WORDS_NORMALIZED) {
     if (badWord.length < 2) continue;
-    const regex = new RegExp(buildFlexPattern(badWord), "gu");
+    const patternStr = buildFlexPattern(badWord);
+    const regex = new RegExp(patternStr, "gu");
     let match;
     while ((match = regex.exec(raw)) !== null) {
-      const startIdx = match.index, endIdx = startIdx + match[0].length;
+      const startIdx = match.index;
+      const endIdx = startIdx + match[0].length;
       let insideSafe = false;
       for (const safe of SAFE_WORDS) {
         if (!safe.includes(badWord)) continue;
-        const safeRegex = new RegExp(buildFlexPattern(safe), "gu");
+        const safePattern = buildFlexPattern(safe);
+        const safeRegex = new RegExp(safePattern, "gu");
         let safeMatch;
         while ((safeMatch = safeRegex.exec(raw)) !== null) {
-          if (startIdx >= safeMatch.index && endIdx <= safeMatch.index + safeMatch[0].length) { insideSafe = true; break; }
+          if (startIdx >= safeMatch.index && endIdx <= safeMatch.index + safeMatch[0].length) {
+            insideSafe = true;
+            break;
+          }
         }
         if (insideSafe) break;
       }
@@ -230,57 +284,96 @@ function containsBadWord(text) {
   return null;
 }
 
-const LINK_PATTERNS = [/https?:\/\/\S+/i, /www\.\S+/i, /\b[a-z0-9-]+\.(com|net|org|xyz|bd|me|io|co|app|site|online|info|dev|ly|gg)\b/i, /\bt\.me\/\S+/i, /\bwa\.me\/\S+/i, /\bchat\.whatsapp\.com\/\S+/i];
-function containsLink(text) { return text ? LINK_PATTERNS.some(p => p.test(String(text))) : false; }
+const LINK_PATTERNS = [
+  /https?:\/\/\S+/i, /www\.\S+/i, /\b[a-z0-9-]+\.(com|net|org|xyz|bd|me|io|co|app|site|online|info|dev|ly|gg)\b/i,
+  /\bt\.me\/\S+/i, /\bwa\.me\/\S+/i, /\bchat\.whatsapp\.com\/\S+/i
+];
 
-function toEnglishDigits(str) { return String(str || "").replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d))); }
+function containsLink(text) {
+  if (!text) return false;
+  const value = String(text);
+  for (const pattern of LINK_PATTERNS) { if (pattern.test(value)) return true; }
+  return false;
+}
+
+function toEnglishDigits(str) {
+  return String(str || "").replace(/[০-৯]/g, d => String("০১২৩৪৫৬৭৮৯".indexOf(d)));
+}
+
 function containsPhoneNumber(text) {
   if (!text) return null;
-  const cleanText = toEnglishDigits(text).replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/[\s\-\(\)]/g, "");
-  const match = cleanText.match(/(?:\+?88)?0?1[3-9]\d{8}/g);
+  const englishText = toEnglishDigits(text).replace(/[\u200B-\u200D\uFEFF]/g, "");
+  const cleanText = englishText.replace(/[\s\-\(\)]/g, ""); 
+  const BD_PHONE_PATTERN = /(?:\+?88)?0?1[3-9]\d{8}/g;
+  const match = cleanText.match(BD_PHONE_PATTERN);
   return match ? match[0] : null;
 }
 
 function containsEveryoneMention(text) {
   if (!text) return null;
   const normalized = String(text).toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
-  return /@(everyone|everybody|all|allmembers|all_members|here|সবাই|সকলে|সকল)\b/i.test(normalized) ? "everyone" : null;
+  if (/@(everyone|everybody|all|allmembers|all_members|here|সবাই|সকলে|সকল)\b/i.test(normalized)) {
+    return "everyone";
+  }
+  return null;
 }
 
-function normalizeSpamText(text) { return String(text || "").toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim(); }
+function normalizeSpamText(text) {
+  return String(text || "").toLowerCase().replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim();
+}
+
 function isDuplicateSpam(groupId, memberJid, text) {
   if (!groupId || !memberJid || !text) return false;
   const normalized = normalizeSpamText(text);
   if (!normalized) return false;
-  const key = `${groupId}:${memberJid}`, now = Date.now(), previous = spamTracker.get(key);
+  const key = `${groupId}:${memberJid}`;
+  const now = Date.now();
+  const previous = spamTracker.get(key);
   if (previous && previous.text === normalized && now - previous.time < SPAM_WINDOW_MS) {
-    spamTracker.set(key, { text: normalized, time: now }); return true;
+    spamTracker.set(key, { text: normalized, time: now });
+    return true;
   }
-  spamTracker.set(key, { text: normalized, time: now }); return false;
+  spamTracker.set(key, { text: normalized, time: now });
+  return false;
 }
 
 function isRateLimited(groupId, memberJid) {
   if (!groupId || !memberJid) return false;
-  const key = `${groupId}:${memberJid}`, now = Date.now(), data = rateLimitTracker.get(key);
-  if (!data || now - data.start > RATE_LIMIT_WINDOW_MS) { rateLimitTracker.set(key, { start: now, count: 1 }); return false; }
-  data.count += 1; return data.count > RATE_LIMIT_MAX_COMMANDS;
+  const key = `${groupId}:${memberJid}`;
+  const now = Date.now();
+  const data = rateLimitTracker.get(key);
+  if (!data || now - data.start > RATE_LIMIT_WINDOW_MS) {
+    rateLimitTracker.set(key, { start: now, count: 1 });
+    return false;
+  }
+  data.count += 1;
+  return data.count > RATE_LIMIT_MAX_COMMANDS;
 }
 
 function isForwardTooSoon(groupId, memberJid) {
   if (!groupId || !memberJid) return false;
-  const key = `${groupId}:${memberJid}`, now = Date.now(), last = forwardTracker.get(key);
-  if (!last || now - last > FORWARD_WINDOW_MS) { forwardTracker.set(key, now); return false; }
+  const key = `${groupId}:${memberJid}`;
+  const now = Date.now();
+  const last = forwardTracker.get(key);
+  if (!last || now - last > FORWARD_WINDOW_MS) {
+    forwardTracker.set(key, now);
+    return false;
+  }
   return true;
 }
 
 function isForwardedMessage(message) {
-  const msg = message?.message; if (!msg) return false;
+  const msg = message?.message;
+  if (!msg) return false;
   const wrappers = [msg, msg.ephemeralMessage?.message, msg.viewOnceMessage?.message, msg.viewOnceMessageV2?.message, msg.documentWithCaptionMessage?.message];
   for (const m of wrappers) {
     if (!m) continue;
-    for (const t of ["extendedTextMessage","imageMessage","videoMessage","documentMessage","audioMessage"]) {
+    const types = ["extendedTextMessage","imageMessage","videoMessage","documentMessage","audioMessage"];
+    for (const t of types) {
       const ctx = m[t]?.contextInfo;
-      if (ctx && (ctx.isForwarded || (typeof ctx.forwardingScore === "number" && ctx.forwardingScore >= 2))) return true;
+      if (!ctx) continue;
+      if (ctx.isForwarded) return true;
+      if (typeof ctx.forwardingScore === "number" && ctx.forwardingScore >= 2) return true;
     }
   }
   return false;
@@ -294,10 +387,13 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 /* =========================================================
-   BOT STATUS & MODERATION SETTINGS
+   BOT STATUS
 ========================================================= */
 
-function createDefaultGroupStatus() { return { enabled: true, disabledCommands: [], moderation: { ...MODERATION_DEFAULTS }, groupLockedUntil: null }; }
+function createDefaultGroupStatus() {
+  return { enabled: true, disabledCommands: [], moderation: { ...MODERATION_DEFAULTS }, groupLockedUntil: null };
+}
+
 function loadBotStatus() {
   try {
     if (!fs.existsSync(BOT_STATUS_FILE)) { botStatus = {}; return; }
@@ -315,7 +411,11 @@ function loadBotStatus() {
     console.log("📂 Bot status loaded.");
   } catch (error) { botStatus = {}; }
 }
-function saveBotStatus() { try { fs.writeFileSync(BOT_STATUS_FILE, JSON.stringify(botStatus, null, 2), "utf8"); } catch {} }
+
+function saveBotStatus() {
+  try { fs.writeFileSync(BOT_STATUS_FILE, JSON.stringify(botStatus, null, 2), "utf8"); } catch {}
+}
+
 function getGroupStatus(groupId) {
   if (!botStatus[groupId]) botStatus[groupId] = createDefaultGroupStatus();
   const s = botStatus[groupId];
@@ -326,18 +426,12 @@ function getGroupStatus(groupId) {
   }
   return s;
 }
+
 function isBotEnabled(groupId) { return getGroupStatus(groupId).enabled !== false; }
 function setBotStatus(groupId, enabled) { getGroupStatus(groupId).enabled = Boolean(enabled); saveBotStatus(); }
-function getModerationStatus(groupId) { return getGroupStatus(groupId).moderation; }
-function isModerationEnabled(groupId, type) { return Boolean(getModerationStatus(groupId)[type]); }
-function setModerationStatus(groupId, type, enabled) {
-  const moderation = getModerationStatus(groupId);
-  if (!Object.prototype.hasOwnProperty.call(moderation, type)) return false;
-  moderation[type] = Boolean(enabled); saveBotStatus(); return true;
-}
 
 /* =========================================================
-   COMMAND DEFINITIONS
+   COMMANDS & MODERATION STATUS
 ========================================================= */
 
 const COMMAND_DEFINITIONS = [
@@ -346,15 +440,11 @@ const COMMAND_DEFINITIONS = [
   { key: "groupinfo", command: "/groupinfo" }, { key: "id", command: "/id" }, { key: "ping", command: "/ping" },
   { key: "deal", command: "/deal" }, { key: "piyas", command: "/piyas" }, { key: "website", command: "/website" },
   { key: "tagall", command: "/tagall" }, { key: "mute", command: "/mute" }, { key: "unmute", command: "/unmute" },
-  { key: "mutelist", command: "/mutelist" },
-  { key: "schedule", command: "/schedule" }, { key: "schedulelist", command: "/schedulelist" }, { key: "cancelschedule", command: "/cancelschedule" }
+  { key: "mutelist", command: "/mutelist" }
 ];
 
 const COMMAND_ALIASES = { "ডিল": "deal" };
-const ADMIN_ONLY_COMMANDS = new Set([
-  "adminpanel","cmdlist","on","off","boton","botoff","mod","moderation","modstatus","modon","modoff","গ্রুপ","mute","unmute","mutelist","tagall",
-  "schedule","schedulelist","cancelschedule"
-]);
+const ADMIN_ONLY_COMMANDS = new Set(["adminpanel","cmdlist","on","off","boton","botoff","mod","moderation","modstatus","modon","modoff","গ্রুপ","mute","unmute","mutelist","tagall"]);
 const PROTECTED_COMMANDS = new Set(["adminpanel","cmdlist","on","off","boton","botoff","mod","moderation","modstatus","modon","modoff","গ্রুপ","mute","unmute","mutelist","tagall"]);
 
 function normalizeCommandName(command) { return command ? String(command).trim().toLowerCase().replace(/^\/+/, "") : ""; }
@@ -363,24 +453,40 @@ function isKnownCommand(command) { return COMMAND_DEFINITIONS.some(item => item.
 function isCommandEnabled(groupId, command) { const name = getCanonicalCommand(command); return name ? !getGroupStatus(groupId).disabledCommands.includes(name) : true; }
 function setCommandStatus(groupId, command, enabled) {
   const name = getCanonicalCommand(command); if (!name) return false;
-  const list = getGroupStatus(groupId).disabledCommands, index = list.indexOf(name);
+  const list = getGroupStatus(groupId).disabledCommands;
+  const index = list.indexOf(name);
   if (enabled) { if (index !== -1) list.splice(index, 1); } else { if (index === -1) list.push(name); }
   saveBotStatus(); return true;
 }
 
+function getModerationStatus(groupId) { return getGroupStatus(groupId).moderation; }
+function isModerationEnabled(groupId, type) { return Boolean(getModerationStatus(groupId)[type]); }
+function setModerationStatus(groupId, type, enabled) {
+  const moderation = getModerationStatus(groupId);
+  if (!Object.prototype.hasOwnProperty.call(moderation, type)) return false;
+  moderation[type] = Boolean(enabled);
+  saveBotStatus(); return true;
+}
+
 /* =========================================================
-   JID, NAME & PARTICIPANT HELPERS (LID FIX)
+   JID, NAME & PARTICIPANT HELPERS
 ========================================================= */
 
 function normalizeJid(jid) { return jid && typeof jid === "string" ? jid.trim() : null; }
 function isPhoneJid(jid) { return typeof jid === "string" && jid.endsWith("@s.whatsapp.net"); }
 function isLidJid(jid) { return typeof jid === "string" && jid.endsWith("@lid"); }
+
 function getPureNumber(jid) {
   if (!jid) return "";
   if (typeof jid === 'object') jid = jid.id || jid.user || "";
   return String(jid).split("@")[0].split(":")[0].replace(/[^0-9]/g, "");
 }
-function phoneNumberToJid(phone) { const number = getPureNumber(phone); return number.length < 8 ? null : number + "@s.whatsapp.net"; }
+
+function phoneNumberToJid(phone) {
+  if (!phone) return null;
+  const number = getPureNumber(phone);
+  return number.length < 8 ? null : number + "@s.whatsapp.net";
+}
 
 function cleanName(name) { return name ? String(name).replace(/\s+/g, " ").trim().slice(0, 80) : null; }
 function getDisplayName(participant = {}) {
@@ -477,6 +583,18 @@ async function getGroupMetadata(groupId) {
   } catch { return null; }
 }
 
+function getBotPhoneJid() {
+  try {
+    const ownId = normalizeJid(sock?.user?.id);
+    if (ownId) {
+      const num = getPureNumber(ownId);
+      if (num.length >= 8) return num + "@s.whatsapp.net";
+    }
+    if (PHONE_NUMBER) return phoneNumberToJid(PHONE_NUMBER);
+    return null;
+  } catch { return null; }
+}
+
 /* =========================================================
    FIXED ADMIN CHECKS (LID/PN) 
 ========================================================= */
@@ -484,29 +602,46 @@ async function getGroupMetadata(groupId) {
 async function isBotAdminInGroup(groupId) {
   try {
     if (!sock || !groupId || !groupId.endsWith("@g.us")) return false;
+    
+    // Cache check
     const cached = botAdminCache.get(groupId);
     if (cached && Date.now() - cached.time < BOT_ADMIN_CACHE_TTL) return cached.value;
+
     const metadata = await getGroupMetadata(groupId);
     if (!metadata) return false;
     const participants = metadata?.participants || [];
     if (!participants.length) return false;
 
+    // বটের সব সম্ভাব্য নাম্বার সংগ্রহ
     const botNumbers = new Set();
     if (PHONE_NUMBER) botNumbers.add(PHONE_NUMBER);
     if (sock?.user?.id) botNumbers.add(getPureNumber(sock.user.id));
     if (sock?.user?.lid) botNumbers.add(getPureNumber(sock.user.lid));
 
     let botParticipant = null;
+    
     for (const p of participants) {
       const pIds = [p.id, p.lid, p.phoneNumber].filter(Boolean);
       let isMatch = false;
       for (const pid of pIds) {
         const pidNum = getPureNumber(pid);
-        if (pidNum && botNumbers.has(pidNum)) { isMatch = true; break; }
+        if (pidNum && botNumbers.has(pidNum)) {
+          isMatch = true;
+          break;
+        }
       }
-      if (isMatch) { botParticipant = p; break; }
+      if (isMatch) {
+        botParticipant = p;
+        break;
+      }
     }
-    if (!botParticipant) return false;
+
+    if (!botParticipant) {
+      console.log(`🚫 Bot participant not found in metadata: ${groupId}`);
+      console.log(`🔍 Bot IDs:`, [...botNumbers]);
+      return false;
+    }
+
     const admin = isAdminParticipant(botParticipant);
     botAdminCache.set(groupId, { value: admin, time: Date.now() });
     return admin;
@@ -536,7 +671,10 @@ async function isSenderAdmin(remoteJid, message) {
     for (const p of participants) {
       const pIds = [p.id, p.lid, p.phoneNumber].filter(Boolean);
       for (const pid of pIds) {
-        if (getPureNumber(pid) === senderNum) { sender = p; break; }
+        if (getPureNumber(pid) === senderNum) {
+          sender = p;
+          break;
+        }
       }
       if (sender) break;
     }
@@ -599,14 +737,27 @@ async function sendCopyButtons(remoteJid, commands) {
 }
 
 /* =========================================================
-   MODERATION & WARNINGS
+   MODERATION WARNING
 ========================================================= */
 
 async function sendModerationWarning(remoteJid, message, reason, warningCount) {
   try {
     const participant = message?.key?.participant;
     const phoneJid = participant ? await getPhoneJid({ id: participant }) : null;
-    const text = `\n╭━━━━━━━━━━━━━━━━━━━━╮\n       ⚠️ *MODERATION*\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n🚫 আপনার মেসেজটি ডিলিট করা হয়েছে।\n\n📌 *কারণ:* ${reason}\n⚠️ *সর্বমোট ওয়ার্নিং:* ${warningCount}\n\n❗ দয়া করে গ্রুপের নিয়ম মেনে চলুন।\n\n🤍 *Piyas Bot*\n`;
+    const text = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       ⚠️ *MODERATION*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+🚫 আপনার মেসেজটি ডিলিট করা হয়েছে।
+
+📌 *কারণ:* ${reason}
+⚠️ *সর্বমোট ওয়ার্নিং:* ${warningCount}
+
+❗ দয়া করে গ্রুপের নিয়ম মেনে চলুন।
+
+🤍 *Piyas Bot*
+`;
     const data = { text };
     if (isPhoneJid(phoneJid)) data.mentions = [phoneJid];
     await sock.sendMessage(remoteJid, data);
@@ -622,12 +773,17 @@ async function sendMuteWarning(remoteJid, memberJid, remainingMs) {
   } catch {}
 }
 
+/* =========================================================
+   MODERATE MESSAGE
+========================================================= */
+
 async function moderateMessage(remoteJid, message, text) {
   try {
     if (!remoteJid || !message || !text) return false;
     if (!isBotEnabled(remoteJid)) return false;
 
     const sender = message?.key?.participant;
+    
     if (sender) {
       const admin = await isSenderAdmin(remoteJid, message);
       if (admin) return false; 
@@ -642,34 +798,43 @@ async function moderateMessage(remoteJid, message, text) {
       return true;
     }
 
-    if (isModerationEnabled(remoteJid, "phoneNumbers") && containsPhoneNumber(text)) {
-      const deleted = await deleteMessage(remoteJid, message);
-      if (deleted) {
-        let warningCount = 0;
-        if (isModerationEnabled(remoteJid, "warnings") && targetJid) warningCount = addWarning(remoteJid, targetJid);
-        if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "Phone Number (ফোন নাম্বার)", warningCount);
+    if (isModerationEnabled(remoteJid, "phoneNumbers")) {
+      const phone = containsPhoneNumber(text);
+      if (phone) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) {
+          let warningCount = 0;
+          if (isModerationEnabled(remoteJid, "warnings") && targetJid) warningCount = addWarning(remoteJid, targetJid);
+          if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "Phone Number (ফোন নাম্বার)", warningCount);
+        }
+        return true;
       }
-      return true;
     }
 
-    if (isModerationEnabled(remoteJid, "everyoneMention") && containsEveryoneMention(text)) {
-      const deleted = await deleteMessage(remoteJid, message);
-      if (deleted) {
-        let warningCount = 0;
-        if (isModerationEnabled(remoteJid, "warnings") && targetJid) warningCount = addWarning(remoteJid, targetJid);
-        if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "@everyone / @all মেনশন", warningCount);
+    if (isModerationEnabled(remoteJid, "everyoneMention")) {
+      const everyone = containsEveryoneMention(text);
+      if (everyone) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) {
+          let warningCount = 0;
+          if (isModerationEnabled(remoteJid, "warnings") && targetJid) warningCount = addWarning(remoteJid, targetJid);
+          if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "@everyone / @all মেনশন", warningCount);
+        }
+        return true;
       }
-      return true;
     }
 
-    if (isModerationEnabled(remoteJid, "badWords") && containsBadWord(text)) {
-      const deleted = await deleteMessage(remoteJid, message);
-      if (deleted) {
-        let warningCount = 0;
-        if (isModerationEnabled(remoteJid, "warnings") && targetJid) warningCount = addWarning(remoteJid, targetJid);
-        if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "অশ্লীল ভাষা (Bad Word)", warningCount);
+    if (isModerationEnabled(remoteJid, "badWords")) {
+      const badWord = containsBadWord(text);
+      if (badWord) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) {
+          let warningCount = 0;
+          if (isModerationEnabled(remoteJid, "warnings") && targetJid) warningCount = addWarning(remoteJid, targetJid);
+          if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "অশ্লীল ভাষা (Bad Word)", warningCount);
+        }
+        return true;
       }
-      return true;
     }
 
     if (isModerationEnabled(remoteJid, "links") && containsLink(text)) {
@@ -682,126 +847,93 @@ async function moderateMessage(remoteJid, message, text) {
       return true;
     }
 
-    if (isModerationEnabled(remoteJid, "antiForward") && targetJid && isForwardedMessage(message) && isForwardTooSoon(remoteJid, targetJid)) {
-      const deleted = await deleteMessage(remoteJid, message);
-      if (deleted) await sendModerationWarning(remoteJid, message, "বারবার ফরোয়ার্ড (Anti-Forward)", getMemberWarningCount(remoteJid, targetJid));
-      return true;
+    if (isModerationEnabled(remoteJid, "antiForward") && targetJid) {
+      if (isForwardedMessage(message) && isForwardTooSoon(remoteJid, targetJid)) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) await sendModerationWarning(remoteJid, message, "বারবার ফরোয়ার্ড (Anti-Forward)", getMemberWarningCount(remoteJid, targetJid));
+        return true;
+      }
     }
 
-    if (isModerationEnabled(remoteJid, "spam") && targetJid && isDuplicateSpam(remoteJid, targetJid, text)) {
-      const deleted = await deleteMessage(remoteJid, message);
-      if (deleted) {
-        let warningCount = 0;
-        if (isModerationEnabled(remoteJid, "warnings")) warningCount = addWarning(remoteJid, targetJid);
-        if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "একই মেসেজ বারবার (Spam)", warningCount);
+    if (isModerationEnabled(remoteJid, "spam") && targetJid) {
+      if (isDuplicateSpam(remoteJid, targetJid, text)) {
+        const deleted = await deleteMessage(remoteJid, message);
+        if (deleted) {
+          let warningCount = 0;
+          if (isModerationEnabled(remoteJid, "warnings")) warningCount = addWarning(remoteJid, targetJid);
+          if (isModerationEnabled(remoteJid, "warnings")) await sendModerationWarning(remoteJid, message, "একই মেসেজ বারবার (Spam)", warningCount);
+        }
+        return true;
       }
-      return true;
     }
 
     return false;
-  } catch (error) { console.log("Moderation Error:", error); return false; }
-}
-
-/* =========================================================
-   SCHEDULER TIMER (প্রতি ১০ সেকেন্ড পর পর চেক করবে)
-========================================================= */
-
-setInterval(async () => {
-  if (!sock || scheduledMessages.length === 0) return;
-  const now = Date.now();
-  let hasChanges = false;
-
-  for (let i = scheduledMessages.length - 1; i >= 0; i--) {
-    const msg = scheduledMessages[i];
-    if (now >= msg.sendAt) {
-      try {
-        await sock.sendMessage(msg.groupId, { text: msg.text });
-        console.log(`✅ Scheduled message sent to ${msg.groupId}`);
-      } catch (err) { console.log(`❌ Failed to send scheduled msg:`, err.message); }
-      scheduledMessages.splice(i, 1);
-      hasChanges = true;
-    }
+  } catch (error) { 
+    console.log("Moderation Error:", error);
+    return false; 
   }
-  if (hasChanges) saveScheduledMessages();
-}, 10 * 1000);
-
-/* =========================================================
-   DURATION & TIME PARSING
-========================================================= */
-
-const BANGLA_DIGITS = { "০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9" };
-function convertBanglaDigits(value) { return String(value).replace(/[০-৯]/g, d => BANGLA_DIGITS[d]); }
-
-function parseDurationNumber(value) {
-  if (!value) return null;
-  const converted = convertBanglaDigits(String(value).trim().toLowerCase());
-  if (/^\d+(\.\d+)?$/.test(converted)) return Number(converted);
-  const words = { "এক":1,"দুই":2,"তিন":3,"চার":4,"পাঁচ":5,"ছয়":6,"সাত":7,"আট":8,"নয়":9,"দশ":10,"এগারো":11,"বারো":12,"তেরো":13,"চৌদ্দ":14,"পনেরো":15,"ষোল":16,"সতেরো":17,"আঠারো":18,"উনিশ":19,"বিশ":20,"ত্রিশ":30,"চল্লিশ":40,"পঞ্চাশ":50,"ষাট":60,"সত্তর":70,"আশি":80,"নব্বই":90,"একশ":100,"একশো":100 };
-  return words[converted] ?? null;
 }
 
-function parseGroupDuration(text) {
-  if (!text) return null;
-  const input = convertBanglaDigits(String(text).trim().toLowerCase()).replace(/\s+/g, " ");
-  let total = 0, found = false;
-  const patterns = [
-    { regex: /(\d+(?:\.\d+)?)\s*(বছর|বছরের|year|years|yr|yrs|y)(?=\s|$)/giu, ms: 365*24*60*60*1000 },
-    { regex: /(\d+(?:\.\d+)?)\s*(মাস|মাসের|month|months|mo|mos)(?=\s|$)/giu, ms: 30*24*60*60*1000 },
-    { regex: /(\d+(?:\.\d+)?)\s*(সপ্তাহ|সপ্তাহের|week|weeks|wk|wks|w)(?=\s|$)/giu, ms: 7*24*60*60*1000 },
-    { regex: /(\d+(?:\.\d+)?)\s*(দিন|দিনের|day|days|d)(?=\s|$)/giu, ms: 24*60*60*1000 },
-    { regex: /(\d+(?:\.\d+)?)\s*(ঘণ্টা|ঘন্টা|ঘণ্টার|ঘন্টার|hour|hours|hr|hrs|h)(?=\s|$)/giu, ms: 60*60*1000 },
-    { regex: /(\d+(?:\.\d+)?)\s*(মিনিট|মিনিটের|minute|minutes|min|mins|m)(?=\s|$)/giu, ms: 60*1000 },
-    { regex: /(\d+(?:\.\d+)?)\s*(সেকেন্ড|সেকেন্ডের|second|seconds|sec|secs|s)(?=\s|$)/giu, ms: 1000 }
-  ];
-  for (const item of patterns) {
-    let match;
-    while ((match = item.regex.exec(input)) !== null) {
-      const number = parseDurationNumber(match[1]);
-      if (number && number > 0) { total += number * item.ms; found = true; }
-    }
+/* =========================================================
+   HTTP SERVER
+========================================================= */
+
+const server = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ status: "online", connected: !!sock, uptime: Math.floor(process.uptime()), groups: Object.keys(botStatus).length, warnings: Object.keys(warnings).length, muted: Object.keys(mutedUsers).length }));
+    return;
   }
-  if (!found) { const number = parseDurationNumber(input); if (number && number > 0) return number * 60 * 1000; }
-  return total > 0 ? total : null;
-}
+  res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("WhatsApp Bot is running!");
+});
 
-function formatGroupDuration(milliseconds) {
-  let seconds = Math.floor(milliseconds / 1000);
-  const years = Math.floor(seconds / (365*24*60*60)); seconds %= 365*24*60*60;
-  const months = Math.floor(seconds / (30*24*60*60)); seconds %= 30*24*60*60;
-  const days = Math.floor(seconds / (24*60*60)); seconds %= 24*60*60;
-  const hours = Math.floor(seconds / (60*60)); seconds %= 60*60;
-  const minutes = Math.floor(seconds / 60); seconds %= 60;
-  const parts = [];
-  if (years) parts.push(`${years} বছর`);
-  if (months) parts.push(`${months} মাস`);
-  if (days) parts.push(`${days} দিন`);
-  if (hours) parts.push(`${hours} ঘণ্টা`);
-  if (minutes) parts.push(`${minutes} মিনিট`);
-  if (seconds) parts.push(`${seconds} সেকেন্ড`);
-  return parts.join(" ") || "0 সেকেন্ড";
-}
+server.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
 
 /* =========================================================
-   TEXT TEMPLATES & MENUS
+   MENU & CALCULATOR
 ========================================================= */
-
-const GROUP_RULES = `\n╭━━━━━━━━━━━━━━━━━━━━╮\n        📜 *GROUP RULES*\n╰━━━━━━━━━━━━━━━━━━━━╯\n1️⃣ সবাইকে সম্মান করুন।\n2️⃣ অশ্লীল কনটেন্ট শেয়ার করবেন না।\n3️⃣ Spam করবেন না।\n4️⃣ ১০ মিনিটে একই Forward বারবার পাঠাবেন না।\n5️⃣ সন্দেহজনক লিংক দেবেন না।\n6️⃣ Admin ছাড়া লিংক দেবেন না।\n7️⃣ কাউকে হয়রানি করবেন না।\n8️⃣ সমস্যা হলে Admin-কে জানান।\n🚫 *কঠোর নিয়ম:*\n9️⃣ গ্রুপে ফোন নাম্বার দেবেন না।\n🔟 @everyone / @all মেনশন করবেন না।\n🛡️ *Auto Moderation:*\nBad Word • Link • Spam • Forward\nPhone Number • @everyone\n→ শনাক্ত হলে সাথে সাথে Delete।\n⚠️ Admin/Owner-এর ক্ষেত্রে প্রযোজ্য নয়।\n🤍 *Piyas*\n`;
-
-const WEBSITE_TEXT = `\n╭━━━━━━━━━━━━━━━━━━━━╮\n      🌐 *OUR WEBSITE*\n╰━━━━━━━━━━━━━━━━━━━━╯\n🌐 ${WEBSITE_URL}\n🎁 Account Buy/Sell, Google Play Points তথ্য।\n🤍 *Piyas*\n`;
-
-const PIYAS_INFO = `\n╭━━━━━━━━━━━━━━━━━━╮\n       🤍 *PIYAS*\n╰━━━━━━━━━━━━━━━━━━╯\n👤 *Name:* মোঃ আল আমিন\n🌐 *English:* MD. AL AMIN\n👨‍👦 *Father:* মোঃ মোশারফ হোসেন\n👩‍👦 *Mother:* মোসাম্মৎ রীপা বেগম\n🎂 *DOB:* ০৯ জানুয়ারি ২০০৬\n🩸 *Blood:* A+\n💍 *Marital:* Unmarried\n🏠 *Address:* বলদার চর, নান্দাইল, হেমগঞ্জ বাজার - ২২৯০, ময়মনসিংহ\n🤍 *Thank You*\n`;
-
-const BOT_OFF_TEXT = `🔴 *BOT OFF*\n\nবট বন্ধ করা হয়েছে।\n\n👑 শুধু Admin আবার চালু করতে পারবেন।\n\n🟢 /boton`;
-const BOT_ON_TEXT = `🟢 *BOT ON*\n\nবট পুনরায় চালু হয়েছে। ✅\n\n🤍 *Piyas*`;
-const BOT_ALREADY_OFF_TEXT = `🔴 *BOT STATUS*\n\nবট ইতিমধ্যেই OFF আছে।\n\n👉 চালু করতে: /boton`;
-const BOT_ALREADY_ON_TEXT = `🟢 *BOT STATUS*\n\nবট ইতিমধ্যেই ON আছে।\n\n👉 বন্ধ করতে: /botoff`;
-
-const DEAL_NOTICE_TOP = `\n╭━━━━━━━━━━━━━━━━━━━━╮\n        🤝 *DEAL NOTICE*\n╰━━━━━━━━━━━━━━━━━━━━╯\n⚠️ *গুরুত্বপূর্ণ!*\nAccount Buy/Sell বা Deal-এর আগে Admin-এর সাথে যোগাযোগ করুন।\n🚫 Admin ছাড়া Deal করবেন না।\n👑 *Admin লিস্ট:*\n`;
-const DEAL_NOTICE_BOTTOM = `\n📌 নিরাপদ থাকুন।\n🤍 *PIYAS*\n`;
 
 function buildMenuText(remoteJid) {
   const enabled = c => isCommandEnabled(remoteJid, c);
-  return `\n╭━━━━━━━━━━━━━━━━━━━━╮\n        🤖 *BOT MENU*\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n╭─❖ 👥 *GROUP COMMANDS*\n│ 1️⃣ ${enabled("menu") ? "/menu" : "🔴 /menu OFF"}\n│ 2️⃣ ${enabled("bot") ? "/bot" : "🔴 /bot OFF"}\n│ 3️⃣ ${enabled("rules") ? "/rules" : "🔴 /rules OFF"}\n│ 4️⃣ ${enabled("admin") ? "/admin" : "🔴 /admin OFF"}\n│ 5️⃣ ${enabled("mention") ? "/mention" : "🔴 /mention OFF"}\n│ 6️⃣ ${enabled("members") ? "/members" : "🔴 /members OFF"}\n│ 7️⃣ ${enabled("groupinfo") ? "/groupinfo" : "🔴 /groupinfo OFF"}\n│ 8️⃣ ${enabled("id") ? "/id" : "🔴 /id OFF"}\n│ 9️⃣ ${enabled("tagall") ? "/tagall 🔒" : "🔴 /tagall OFF"}\n╰────────────────────\n╭─❖ ⚙️ *UTILITY*\n│ 🔟 ${enabled("ping") ? "/ping" : "🔴 /ping OFF"}\n╰────────────────────\n╭─❖ 💰 *BUY / SELL*\n│ 1️⃣1️⃣ ${enabled("deal") ? "/deal /ডিল" : "🔴 /deal /ডিল OFF"}\n╰────────────────────\n╭─❖ 🤍 *PIYAS*\n│ 1️⃣2️⃣ ${enabled("piyas") ? "/piyas" : "🔴 /piyas OFF"}\n╰────────────────────\n╭─❖ 🌐 *WEBSITE*\n│ 1️⃣3️⃣ ${enabled("website") ? "/website" : "🔴 /website OFF"}\n╰────────────────────\n╭─❖ 🧮 *CALCULATOR*\n│ 1️⃣4️⃣ /20+2\n│ 1️⃣5️⃣ /100-25\n│ 1️⃣6️⃣ /20*5\n│ 1️⃣7️⃣ /100/4\n╰────────────────────\n━━━━━━━━━━━━━━━━━━━━\n🔒 = Admin Only\n━━━━━━━━━━━━━━━━━━━━\n`;
+  return `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🤖 *BOT MENU*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+╭─❖ 👥 *GROUP COMMANDS*
+│ 1️⃣ ${enabled("menu") ? "/menu" : "🔴 /menu OFF"}
+│ 2️⃣ ${enabled("bot") ? "/bot" : "🔴 /bot OFF"}
+│ 3️⃣ ${enabled("rules") ? "/rules" : "🔴 /rules OFF"}
+│ 4️⃣ ${enabled("admin") ? "/admin" : "🔴 /admin OFF"}
+│ 5️⃣ ${enabled("mention") ? "/mention" : "🔴 /mention OFF"}
+│ 6️⃣ ${enabled("members") ? "/members" : "🔴 /members OFF"}
+│ 7️⃣ ${enabled("groupinfo") ? "/groupinfo" : "🔴 /groupinfo OFF"}
+│ 8️⃣ ${enabled("id") ? "/id" : "🔴 /id OFF"}
+│ 9️⃣ ${enabled("tagall") ? "/tagall 🔒" : "🔴 /tagall OFF"}
+╰────────────────────
+╭─❖ ⚙️ *UTILITY*
+│ 🔟 ${enabled("ping") ? "/ping" : "🔴 /ping OFF"}
+╰────────────────────
+╭─❖ 💰 *BUY / SELL*
+│ 1️⃣1️⃣ ${enabled("deal") ? "/deal /ডিল" : "🔴 /deal /ডিল OFF"}
+╰────────────────────
+╭─❖ 🤍 *PIYAS*
+│ 1️⃣2️⃣ ${enabled("piyas") ? "/piyas" : "🔴 /piyas OFF"}
+╰────────────────────
+╭─❖ 🌐 *WEBSITE*
+│ 1️⃣3️⃣ ${enabled("website") ? "/website" : "🔴 /website OFF"}
+╰────────────────────
+╭─❖ 🧮 *CALCULATOR*
+│ 1️⃣4️⃣ /20+2
+│ 1️⃣5️⃣ /100-25
+│ 1️⃣6️⃣ /20*5
+│ 1️⃣7️⃣ /100/4
+╰────────────────────
+━━━━━━━━━━━━━━━━━━━━
+🔒 = Admin Only
+━━━━━━━━━━━━━━━━━━━━
+`;
 }
 
 async function sendPublicMenu(remoteJid) {
@@ -853,6 +985,10 @@ async function handleCalculator(remoteJid, text) {
   } catch (error) { console.log("⚠️ Calc error:", error?.message); }
 }
 
+/* =========================================================
+   ADMIN PANEL & STATUS LIST
+========================================================= */
+
 async function sendAdminPanel(remoteJid) {
   try {
     const disabled = getGroupStatus(remoteJid).disabledCommands || [];
@@ -866,7 +1002,47 @@ async function sendAdminPanel(remoteJid) {
     const lock = getGroupStatus(remoteJid).groupLockedUntil;
     const lockStatus = typeof lock === "number" && lock > Date.now() ? `🔒 Closed\n⏰ ${new Date(lock).toLocaleString("en-BD")}` : "🔓 Open";
 
-    const text = `\n╭━━━━━━━━━━━━━━━━━━━━╮\n       👑 *ADMIN PANEL*\n╰━━━━━━━━━━━━━━━━━━━━╯\n\n╭─❖ 🤖 *BOT*\n│ ${isBotEnabled(remoteJid) ? "🟢 ON" : "🔴 OFF"}\n╰────────────────────\n╭─❖ 🔒 *GROUP*\n│ ${lockStatus}\n╰────────────────────\n╭─❖ ⚙️ *COMMANDS*\n${commandStatus}\n╰────────────────────\n╭─❖ 🛡️ *MODERATION*\n│ ${mod.badWords ? "🟢" : "🔴"} Bad Word\n│ ${mod.links ? "🟢" : "🔴"} Link\n│ ${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number\n│ ${mod.everyoneMention ? "🟢" : "🔴"} @everyone\n│ ${mod.spam ? "🟢" : "🔴"} Spam\n│ ${mod.warnings ? "🟢" : "🔴"} Warning\n│ ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward\n╰────────────────────\n╭─❖ 🔇 *MUTE*\n│ /mute @user 10m\n│ /unmute @user\n│ /mutelist\n╰────────────────────\n╭─❖ ⚙️ *CONTROL*\n│ /on <command>\n│ /off <command>\n│ /cmdlist\n│ /mod\n╰────────────────────\n╭─❖ 🔒 *GROUP LOCK*\n│ /গ্রুপ বন্ধ 2 মিনিট\n╰────────────────────\n━━━━━━━━━━━━━━━━━━━━\n🔒 = Admin Only\n━━━━━━━━━━━━━━━━━━━━\n`;
+    const text = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+       👑 *ADMIN PANEL*
+╰━━━━━━━━━━━━━━━━━━━━╯
+
+╭─❖ 🤖 *BOT*
+│ ${isBotEnabled(remoteJid) ? "🟢 ON" : "🔴 OFF"}
+╰────────────────────
+╭─❖ 🔒 *GROUP*
+│ ${lockStatus}
+╰────────────────────
+╭─❖ ⚙️ *COMMANDS*
+${commandStatus}
+╰────────────────────
+╭─❖ 🛡️ *MODERATION*
+│ ${mod.badWords ? "🟢" : "🔴"} Bad Word
+│ ${mod.links ? "🟢" : "🔴"} Link
+│ ${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number
+│ ${mod.everyoneMention ? "🟢" : "🔴"} @everyone
+│ ${mod.spam ? "🟢" : "🔴"} Spam
+│ ${mod.warnings ? "🟢" : "🔴"} Warning
+│ ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward
+╰────────────────────
+╭─❖ 🔇 *MUTE*
+│ /mute @user 10m
+│ /unmute @user
+│ /mutelist
+╰────────────────────
+╭─❖ ⚙️ *CONTROL*
+│ /on <command>
+│ /off <command>
+│ /cmdlist
+│ /mod
+╰────────────────────
+╭─❖ 🔒 *GROUP LOCK*
+│ /গ্রুপ বন্ধ 2 মিনিট
+╰────────────────────
+━━━━━━━━━━━━━━━━━━━━
+🔒 = Admin Only
+━━━━━━━━━━━━━━━━━━━━
+`;
     await sock.sendMessage(remoteJid, { text });
     await sendCopyButtons(remoteJid, ["/adminpanel", "/boton", "/botoff", "/cmdlist", "/mod", "/modon", "/modoff", "/mute @user 10m", "/unmute @user", "/mutelist", "/গ্রুপ বন্ধ 2 মিনিট"]);
   } catch (error) { console.log("❌ Admin panel error:", error?.message); }
@@ -885,7 +1061,26 @@ async function sendCommandList(remoteJid) {
   const offCount = COMMAND_DEFINITIONS.length - onCount;
 
   await sock.sendMessage(remoteJid, {
-    text: `\n╭━━━━━━━━━━━━━━━━━━━━╮\n      📋 *COMMAND STATUS*\n╰━━━━━━━━━━━━━━━━━━━━╯\n${commandLines.join("\n")}\n━━━━━━━━━━━━━━━━━━━━\n🟢 ON: ${onCount}   🔴 OFF: ${offCount}\n🔒 = Admin Only\n━━━━━━━━━━━━━━━━━━━━\n🤖 BOT: ${isBotEnabled(remoteJid) ? "🟢" : "🔴"}\n🛡️ MOD:\n${mod.badWords ? "🟢" : "🔴"} Bad Word\n${mod.links ? "🟢" : "🔴"} Link\n${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number\n${mod.everyoneMention ? "🟢" : "🔴"} @everyone\n${mod.spam ? "🟢" : "🔴"} Spam\n${mod.warnings ? "🟢" : "🔴"} Warning\n${mod.antiForward ? "🟢" : "🔴"} Anti-Forward\n━━━━━━━━━━━━━━━━━━━━\n`
+    text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+      📋 *COMMAND STATUS*
+╰━━━━━━━━━━━━━━━━━━━━╯
+${commandLines.join("\n")}
+━━━━━━━━━━━━━━━━━━━━
+🟢 ON: ${onCount}   🔴 OFF: ${offCount}
+🔒 = Admin Only
+━━━━━━━━━━━━━━━━━━━━
+🤖 BOT: ${isBotEnabled(remoteJid) ? "🟢" : "🔴"}
+🛡️ MOD:
+${mod.badWords ? "🟢" : "🔴"} Bad Word
+${mod.links ? "🟢" : "🔴"} Link
+${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number
+${mod.everyoneMention ? "🟢" : "🔴"} @everyone
+${mod.spam ? "🟢" : "🔴"} Spam
+${mod.warnings ? "🟢" : "🔴"} Warning
+${mod.antiForward ? "🟢" : "🔴"} Anti-Forward
+━━━━━━━━━━━━━━━━━━━━
+`
   });
 }
 
@@ -895,13 +1090,103 @@ async function sendModerationStatus(remoteJid) {
   const disabledText = disabled.length ? disabled.map(c => `│ 🔴 /${c}`).join("\n") : "│ 🟢 কিছুই OFF নেই";
 
   await sock.sendMessage(remoteJid, {
-    text: `\n╭━━━━━━━━━━━━━━━━━━━━╮\n        🛠️ *MOD STATUS*\n╰━━━━━━━━━━━━━━━━━━━━╯\n╭─❖ 🚫 *OFF*\n${disabledText}\n╰────────────────────\n╭─❖ 🛡️ *MODERATION*\n│ ${mod.badWords ? "🟢" : "🔴"} Bad Word\n│ ${mod.links ? "🟢" : "🔴"} Link\n│ ${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number\n│ ${mod.everyoneMention ? "🟢" : "🔴"} @everyone\n│ ${mod.spam ? "🟢" : "🔴"} Spam\n│ ${mod.warnings ? "🟢" : "🔴"} Warning\n│ ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward\n╰────────────────────\n💡 উদাহরণ:\n/off deal\n/on deal\n`
+    text: `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🛠️ *MOD STATUS*
+╰━━━━━━━━━━━━━━━━━━━━╯
+╭─❖ 🚫 *OFF*
+${disabledText}
+╰────────────────────
+╭─❖ 🛡️ *MODERATION*
+│ ${mod.badWords ? "🟢" : "🔴"} Bad Word
+│ ${mod.links ? "🟢" : "🔴"} Link
+│ ${mod.phoneNumbers ? "🟢" : "🔴"} Phone Number
+│ ${mod.everyoneMention ? "🟢" : "🔴"} @everyone
+│ ${mod.spam ? "🟢" : "🔴"} Spam
+│ ${mod.warnings ? "🟢" : "🔴"} Warning
+│ ${mod.antiForward ? "🟢" : "🔴"} Anti-Forward
+╰────────────────────
+💡 উদাহরণ:
+/off deal
+/on deal
+`
   });
   await sendCopyButtons(remoteJid, ["/mod", "/off deal", "/on deal"]);
 }
 
 /* =========================================================
-   WELCOME & ADMIN LISTS
+   TEXT MESSAGES
+========================================================= */
+
+const GROUP_RULES = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        📜 *GROUP RULES*
+╰━━━━━━━━━━━━━━━━━━━━╯
+1️⃣ সবাইকে সম্মান করুন।
+2️⃣ অশ্লীল কনটেন্ট শেয়ার করবেন না।
+3️⃣ Spam করবেন না।
+4️⃣ ১০ মিনিটে একই Forward বারবার পাঠাবেন না।
+5️⃣ সন্দেহজনক লিংক দেবেন না।
+6️⃣ Admin ছাড়া লিংক দেবেন না।
+7️⃣ কাউকে হয়রানি করবেন না।
+8️⃣ সমস্যা হলে Admin-কে জানান।
+🚫 *কঠোর নিয়ম:*
+9️⃣ গ্রুপে ফোন নাম্বার দেবেন না।
+🔟 @everyone / @all মেনশন করবেন না।
+🛡️ *Auto Moderation:*
+Bad Word • Link • Spam • Forward
+Phone Number • @everyone
+→ শনাক্ত হলে সাথে সাথে Delete।
+⚠️ Admin/Owner-এর ক্ষেত্রে প্রযোজ্য নয়।
+🤍 *Piyas*
+`;
+
+const WEBSITE_TEXT = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+      🌐 *OUR WEBSITE*
+╰━━━━━━━━━━━━━━━━━━━━╯
+🌐 ${WEBSITE_URL}
+🎁 Account Buy/Sell, Google Play Points তথ্য।
+🤍 *Piyas*
+`;
+
+const PIYAS_INFO = `
+╭━━━━━━━━━━━━━━━━━━╮
+       🤍 *PIYAS*
+╰━━━━━━━━━━━━━━━━━━╯
+👤 *Name:* মোঃ আল আমিন
+🌐 *English:* MD. AL AMIN
+👨‍👦 *Father:* মোঃ মোশারফ হোসেন
+👩‍👦 *Mother:* মোসাম্মৎ রীপা বেগম
+🎂 *DOB:* ০৯ জানুয়ারি ২০০৬
+🩸 *Blood:* A+
+💍 *Marital:* Unmarried
+🏠 *Address:* বলদার চর, নান্দাইল, হেমগঞ্জ বাজার - ২২৯০, ময়মনসিংহ
+🤍 *Thank You*
+`;
+
+const BOT_OFF_TEXT = `🔴 *BOT OFF*\n\nবট বন্ধ করা হয়েছে।\n\n👑 শুধু Admin আবার চালু করতে পারবেন।\n\n🟢 /boton`;
+const BOT_ON_TEXT = `🟢 *BOT ON*\n\nবট পুনরায় চালু হয়েছে। ✅\n\n🤍 *Piyas*`;
+const BOT_ALREADY_OFF_TEXT = `🔴 *BOT STATUS*\n\nবট ইতিমধ্যেই OFF আছে।\n\n👉 চালু করতে: /boton`;
+const BOT_ALREADY_ON_TEXT = `🟢 *BOT STATUS*\n\nবট ইতিমধ্যেই ON আছে।\n\n👉 বন্ধ করতে: /botoff`;
+
+const DEAL_NOTICE_TOP = `
+╭━━━━━━━━━━━━━━━━━━━━╮
+        🤝 *DEAL NOTICE*
+╰━━━━━━━━━━━━━━━━━━━━╯
+⚠️ *গুরুত্বপূর্ণ!*
+Account Buy/Sell বা Deal-এর আগে Admin-এর সাথে যোগাযোগ করুন।
+🚫 Admin ছাড়া Deal করবেন না।
+👑 *Admin লিস্ট:*
+`;
+
+const DEAL_NOTICE_BOTTOM = `
+📌 নিরাপদ থাকুন।
+🤍 *PIYAS*
+`;
+
+/* =========================================================
+   WELCOME & DURATION
 ========================================================= */
 
 async function sendWelcome(groupId, participant) {
@@ -927,6 +1212,61 @@ async function sendWelcome(groupId, participant) {
     }
   } catch (error) { console.log("❌ Welcome:", error?.message); }
 }
+
+const BANGLA_DIGITS = { "০":"0","১":"1","২":"2","৩":"3","৪":"4","৫":"5","৬":"6","৭":"7","৮":"8","৯":"9" };
+function convertBanglaDigits(value) { return String(value).replace(/[০-৯]/g, d => BANGLA_DIGITS[d]); }
+function parseDurationNumber(value) {
+  if (!value) return null;
+  const converted = convertBanglaDigits(String(value).trim().toLowerCase());
+  if (/^\d+(\.\d+)?$/.test(converted)) return Number(converted);
+  const words = { "এক":1,"দুই":2,"তিন":3,"চার":4,"পাঁচ":5,"ছয়":6,"সাত":7,"আট":8,"নয়":9,"দশ":10,"এগারো":11,"বারো":12,"তেরো":13,"চৌদ্দ":14,"পনেরো":15,"ষোল":16,"সতেরো":17,"আঠারো":18,"উনিশ":19,"বিশ":20,"ত্রিশ":30,"চল্লিশ":40,"পঞ্চাশ":50,"ষাট":60,"সত্তর":70,"আশি":80,"নব্বই":90,"একশ":100,"একশো":100 };
+  return words[converted] ?? null;
+}
+
+function parseGroupDuration(text) {
+  if (!text) return null;
+  const input = convertBanglaDigits(String(text).trim().toLowerCase()).replace(/\s+/g, " ");
+  let total = 0, found = false;
+  const patterns = [
+    { regex: /(\d+(?:\.\d+)?)\s*(বছর|বছরের|year|years|yr|yrs|y)(?=\s|$)/giu, ms: 365*24*60*60*1000 },
+    { regex: /(\d+(?:\.\d+)?)\s*(মাস|মাসের|month|months|mo|mos)(?=\s|$)/giu, ms: 30*24*60*60*1000 },
+    { regex: /(\d+(?:\.\d+)?)\s*(সপ্তাহ|সপ্তাহের|week|weeks|wk|wks|w)(?=\s|$)/giu, ms: 7*24*60*60*1000 },
+    { regex: /(\d+(?:\.\d+)?)\s*(দিন|দিনের|day|days|d)(?=\s|$)/giu, ms: 24*60*60*1000 },
+    { regex: /(\d+(?:\.\d+)?)\s*(ঘণ্টা|ঘন্টা|ঘণ্টার|ঘন্টার|hour|hours|hr|hrs|h)(?=\s|$)/giu, ms: 60*60*1000 },
+    { regex: /(\d+(?:\.\d+)?)\s*(মিনিট|মিনিটের|minute|minutes|min|mins|m)(?=\s|$)/giu, ms: 60*1000 },
+    { regex: /(\d+(?:\.\d+)?)\s*(সেকেন্ড|সেকেন্ডের|second|seconds|sec|secs|s)(?=\s|$)/giu, ms: 1000 }
+  ];
+  for (const item of patterns) {
+    let match;
+    while ((match = item.regex.exec(input)) !== null) {
+      const number = parseDurationNumber(match[1]);
+      if (number && number > 0) { total += number * item.ms; found = true; }
+    }
+  }
+  if (!found) { const number = parseDurationNumber(input); if (number && number > 0) return number * 60 * 1000; }
+  return total > 0 ? total : null;
+}
+
+function formatGroupDuration(milliseconds) {
+  let seconds = Math.floor(milliseconds / 1000);
+  const years = Math.floor(seconds / (365*24*60*60)); seconds %= 365*24*60*60;
+  const months = Math.floor(seconds / (30*24*60*60)); seconds %= 30*24*60*60;
+  const days = Math.floor(seconds / (24*60*60)); seconds %= 24*60*60;
+  const hours = Math.floor(seconds / (60*60)); seconds %= 60*60;
+  const minutes = Math.floor(seconds / 60); seconds %= 60;
+  const parts = [];
+  if (years) parts.push(`${years} বছর`);
+  if (months) parts.push(`${months} মাস`);
+  if (days) parts.push(`${days} দিন`);
+  if (hours) parts.push(`${hours} ঘণ্টা`);
+  if (minutes) parts.push(`${minutes} মিনিট`);
+  if (seconds) parts.push(`${seconds} সেকেন্ড`);
+  return parts.join(" ") || "0 সেকেন্ড";
+}
+
+/* =========================================================
+   ADMIN LIST & DEAL NOTICE
+========================================================= */
 
 async function sendAdminList(remoteJid) {
   try {
@@ -981,13 +1321,19 @@ async function sendDealNotice(remoteJid) {
   } catch (error) { console.log("❌ Deal error:", error?.message); }
 }
 
+/* =========================================================
+   MENTION, TAGALL & MUTE
+========================================================= */
+
 function getMentionedJids(message) {
-  const msg = message?.message; if (!msg) return [];
+  const msg = message?.message;
+  if (!msg) return [];
   const wrappers = [msg, msg.ephemeralMessage?.message, msg.viewOnceMessage?.message, msg.viewOnceMessageV2?.message];
   const result = [], seen = new Set();
   for (const m of wrappers) {
     if (!m) continue;
-    for (const t of ["extendedTextMessage","imageMessage","videoMessage","documentMessage"]) {
+    const types = ["extendedTextMessage","imageMessage","videoMessage","documentMessage"];
+    for (const t of types) {
       const ctx = m[t]?.contextInfo;
       if (!ctx) continue;
       for (const jid of (ctx.mentionedJid || [])) { if (!seen.has(jid)) { seen.add(jid); result.push(jid); } }
@@ -1104,7 +1450,7 @@ async function handleMuteList(remoteJid) {
 }
 
 /* =========================================================
-   GROUP LOCK & UNLOCK
+   GROUP LOCK
 ========================================================= */
 
 async function lockGroup(remoteJid, durationMs) {
@@ -1164,19 +1510,8 @@ setInterval(checkExpiredGroupLocks, GROUP_LOCK_CHECK_INTERVAL);
 setInterval(checkExpiredMutes, 10 * 1000);
 
 /* =========================================================
-   HTTP SERVER & PAIRING
+   PAIRING & MESSAGE HELPERS
 ========================================================= */
-
-const server = http.createServer((req, res) => {
-  if (req.url === "/health") {
-    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify({ status: "online", connected: !!sock, uptime: Math.floor(process.uptime()), groups: Object.keys(botStatus).length, warnings: Object.keys(warnings).length, muted: Object.keys(mutedUsers).length }));
-    return;
-  }
-  res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-  res.end("WhatsApp Bot is running!");
-});
-server.listen(PORT, () => console.log(`🌐 Server running on port ${PORT}`));
 
 function savePairingNumber(number) { try { fs.writeFileSync(PAIRING_NUMBER_FILE, number, "utf8"); } catch {} }
 function getCredentialPhoneNumber(creds) {
@@ -1242,6 +1577,7 @@ async function startBot() {
     sock.ev.on("contacts.upsert", c => { try { saveContacts(c); } catch {} });
     sock.ev.on("contacts.update", c => { try { saveContacts(c); } catch {} });
 
+    /* GROUP PARTICIPANTS */
     sock.ev.on("group-participants.update", async event => {
       try {
         const groupId = event?.id;
@@ -1256,6 +1592,7 @@ async function startBot() {
       } catch (error) { console.log("❌ Participant error:", error?.message); }
     });
 
+    /* CONNECTION */
     sock.ev.on("connection.update", async update => {
       try {
         const { connection, lastDisconnect } = update;
@@ -1283,6 +1620,7 @@ async function startBot() {
       } catch (error) { console.log("❌ Connection error:", error?.message); }
     });
 
+    /* MESSAGES */
     sock.ev.on("messages.upsert", async ({ messages }) => {
       try {
         if (!Array.isArray(messages)) return;
@@ -1299,6 +1637,7 @@ async function startBot() {
             const text = getMessageText(message);
             if (!text) continue;
 
+            // 🛡️ Moderate Message
             const moderated = await moderateMessage(remoteJid, message, text);
             if (moderated) continue;
 
@@ -1326,7 +1665,7 @@ async function startBot() {
 
             /* ADMIN CHECK */
             if (ADMIN_ONLY_COMMANDS.has(command) && !senderIsAdmin) {
-              if (["mute", "unmute", "mutelist", "tagall", "schedule", "schedulelist", "cancelschedule"].includes(command)) {
+              if (["mute", "unmute", "mutelist", "tagall"].includes(command)) {
                 await sock.sendMessage(remoteJid, { text: `❌ *ADMIN ONLY* 🔒\n\nশুধুমাত্র Admin/Owner ব্যবহার করতে পারবেন।` });
               }
               continue;
@@ -1340,112 +1679,6 @@ async function startBot() {
               const durationMs = parseGroupDuration(durationText);
               if (!durationMs) { await sock.sendMessage(remoteJid, { text: "❌ সময় সঠিক নয়।" }); continue; }
               await lockGroup(remoteJid, durationMs); continue;
-            }
-
-            /* SCHEDULE MESSAGE (SMART FORMAT WITH HYPHEN FIX) */
-            const rawCommandEn = convertBanglaDigits(rawCommand.replace(/^\//, ""));
-            const isDirectSchedule = /^\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?[\s\-:]+\d{1,2}(?::\d{1,2})?[\s\-:]*\s*(am|pm|mp|এএম|পিএম)?$/i.test(rawCommandEn);
-
-            if (command === "schedule" || isDirectSchedule) {
-              if (!senderIsAdmin) {
-                await sock.sendMessage(remoteJid, { text: `❌ *ADMIN ONLY* 🔒\n\nশুধুমাত্র Admin/Owner মেসেজ শেজুড করতে পারবেন।` });
-                continue;
-              }
-
-              let fullText = args.join(" ");
-              if (isDirectSchedule) {
-                fullText = rawCommand.replace(/^\//, "") + " " + fullText; 
-              }
-              
-              const enText = convertBanglaDigits(fullText);
-              
-              const match = enText.match(/^(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?[\s\-:]+(\d{1,2})(?::(\d{1,2}))?[\s\-:]*\s*(am|pm|mp|এএম|পিএম)?\s+(.+)$/i);
-
-              if (!match) {
-                await sock.sendMessage(remoteJid, { text: `🕒 *SCHEDULE MESSAGE*\n\n*ব্যবহার:*\n/26-12-2026-4:2pm শুভ জন্মদিন\n\n*আরও কিছু উদাহরণ:*\n/25/12/2024 14:00 ঈদ মোবারক\n/schedule 15-08 9:00am স্বাধীনতা দিবস` });
-                continue;
-              }
-
-              const day = parseInt(match[1]);
-              const month = parseInt(match[2]) - 1;
-              const year = match[3] ? parseInt(match[3]) : new Date().getFullYear();
-              
-              let hours = parseInt(match[4]);
-              const minutes = match[5] ? parseInt(match[5]) : 0;
-              const ampm = match[6] ? match[6].toLowerCase() : null;
-              const textToSend = match[7].trim();
-
-              if (ampm === 'pm' || ampm === 'mp' || ampm === 'পিএম') {
-                if (hours < 12) hours += 12;
-              } else if (ampm === 'am' || ampm === 'এএম') {
-                if (hours === 12) hours = 0;
-              }
-
-              if (hours > 23 || minutes > 59 || day > 31 || month > 11) {
-                await sock.sendMessage(remoteJid, { text: "❌ তারিখ বা সময় সঠিক নয়।" });
-                continue;
-              }
-
-              let targetDate = new Date(year, month, day, hours, minutes, 0);
-              
-              if (!match[3] && targetDate.getTime() < Date.now()) {
-                targetDate.setFullYear(targetDate.getFullYear() + 1);
-              }
-
-              if (isNaN(targetDate.getTime()) || targetDate.getTime() <= Date.now()) {
-                await sock.sendMessage(remoteJid, { text: "❌ সময় পার হয়ে গেছে অথবা তারিখ সঠিক নয়। ভবিষ্যতের সময় দিন।" });
-                continue;
-              }
-
-              scheduledMessages.push({
-                id: Date.now().toString(),
-                groupId: remoteJid,
-                sender: senderJid,
-                sendAt: targetDate.getTime(),
-                text: textToSend
-              });
-              saveScheduledMessages();
-
-              const formattedTime = targetDate.toLocaleString("en-BD", { timeZone: "Asia/Dhaka" });
-              await sock.sendMessage(remoteJid, { text: `✅ *SCHEDULED SUCCESSFULLY!*\n\n🕒 *সময়:* ${formattedTime}\n📝 *মেসেজ:* ${textToSend}\n\nবট ঠিক এই সময়ে মেসেজটি পাঠিয়ে দেবে।` });
-              continue;
-            }
-
-            /* LIST SCHEDULED MESSAGES */
-            if (command === "schedulelist") {
-              const groupMsgs = scheduledMessages.filter(m => m.groupId === remoteJid);
-              if (groupMsgs.length === 0) {
-                await sock.sendMessage(remoteJid, { text: "📭 এই গ্রুপে কোনো মেসেজ সেজুড করা নেই।" });
-                continue;
-              }
-              let listText = `🕒 *SCHEDULED MESSAGES*\n\n`;
-              groupMsgs.forEach((m, index) => {
-                const d = new Date(m.sendAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" });
-                listText += `${index + 1}. ⏰ ${d}\n📝 ${m.text}\n\n`;
-              });
-              listText += `💡 মুছে ফেলতে: /cancelschedule <নাম্বার>`;
-              await sock.sendMessage(remoteJid, { text: listText });
-              continue;
-            }
-
-            /* CANCEL SCHEDULED MESSAGE */
-            if (command === "cancelschedule") {
-              const index = parseInt(args[0]) - 1;
-              const groupMsgs = scheduledMessages.filter(m => m.groupId === remoteJid);
-              
-              if (isNaN(index) || index < 0 || index >= groupMsgs.length) {
-                await sock.sendMessage(remoteJid, { text: "❌ সঠিক নাম্বার দিন। দেখতে /schedulelist দিন।" });
-                continue;
-              }
-              
-              const targetMsg = groupMsgs[index];
-              const originalIndex = scheduledMessages.findIndex(m => m.id === targetMsg.id);
-              if (originalIndex !== -1) {
-                scheduledMessages.splice(originalIndex, 1);
-                saveScheduledMessages();
-                await sock.sendMessage(remoteJid, { text: "✅ সেজুড করা মেসেজটি বাতিল করা হয়েছে।" });
-              }
-              continue;
             }
 
             if (command === "botoff") { if (!isBotEnabled(remoteJid)) { await sock.sendMessage(remoteJid, { text: BOT_ALREADY_OFF_TEXT }); continue; } setBotStatus(remoteJid, false); await sock.sendMessage(remoteJid, { text: BOT_OFF_TEXT }); continue; }
@@ -1542,5 +1775,5 @@ process.on("SIGTERM", shutdown);
 loadBotStatus();
 loadWarnings();
 loadMuted();
-loadScheduledMessages();
+
 startBot();
